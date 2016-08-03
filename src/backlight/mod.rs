@@ -15,36 +15,27 @@
 // You should have received a copy of the GNU General Public License
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::rc::Rc;
+use std::sync::Arc;
 use xcb;
 
-pub trait Backlight {
-	fn get(&mut self) -> f32;
-	fn set(&mut self, value: f32);
-}
+use error;
 
-macro_rules! try {
-	($body:expr) => (
-		if let Some(value) = $body {
-			value
-		}
-		else {
-			return None;
-		}
-	);
+pub trait Backlight {
+	fn get(&mut self) -> error::Result<f32>;
+	fn set(&mut self, value: f32) -> error::Result<()>;
 }
 
 mod randr;
 mod sys;
 
-pub fn open(connection: Rc<xcb::Connection>, screen: i32) -> Option<Box<Backlight>> {
-	if let Some(backlight) = randr::Backlight::open(connection.clone(), screen) {
-		Some(Box::new(backlight))
+pub fn open(connection: Arc<xcb::Connection>, screen: i32) -> error::Result<Box<Backlight>> {
+	if let Ok(backlight) = randr::Backlight::open(connection.clone(), screen) {
+		Ok(Box::new(backlight))
 	}
-	else if let Some(backlight) = sys::Backlight::open() {
-		Some(Box::new(backlight))
+	else if let Ok(backlight) = sys::Backlight::open() {
+		Ok(Box::new(backlight))
 	}
 	else {
-		None
+		Err(error::Error::Unsupported)
 	}
 }

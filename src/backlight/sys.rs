@@ -19,23 +19,25 @@ use std::fs::{self, File};
 use std::path::PathBuf;
 use std::io::{Write, Read};
 
+use error;
+
 pub struct Backlight {
 	path: PathBuf,
 	max:  u32,
 }
 
 impl Backlight {
-	pub fn open() -> Option<Self> {
-		let root = try!(try!(try!(fs::read_dir("/sys/class/backlight").ok()).next()).ok()).path();
+	pub fn open() -> error::Result<Self> {
+		let root = fs::read_dir("/sys/class/backlight")?.next().ok_or(error::Error::Unsupported)??.path();
 		let max  = {
-			let mut file    = try!(File::open(root.join("max_brightness")).ok());
+			let mut file    = File::open(root.join("max_brightness"))?;
 			let mut content = String::new();
 
-			try!(file.read_to_string(&mut content).ok());
-			try!(content.trim().parse::<u32>().ok())
+			file.read_to_string(&mut content)?;
+			content.trim().parse::<u32>().or(Err(error::Error::Unsupported))?
 		};
 
-		Some(Backlight {
+		Ok(Backlight {
 			path: root.join("brightness"),
 			max:  max,
 		})
@@ -43,16 +45,19 @@ impl Backlight {
 }
 
 impl super::Backlight for Backlight {
-	fn get(&mut self) -> f32 {
-		let mut file    = File::open(&self.path).unwrap();
+	fn get(&mut self) -> error::Result<f32> {
+		let mut file    = File::open(&self.path)?;
 		let mut content = String::new();
 
-		file.read_to_string(&mut content).unwrap();
-		content.trim().parse::<f32>().unwrap() * 100.0 / self.max as f32
+		file.read_to_string(&mut content)?;
+		Ok(content.trim().parse::<f32>().or(Err(error::Error::Unsupported))?
+			* 100.0 / self.max as f32)
 	}
 
-	fn set(&mut self, value: f32) {
-		let mut file = File::create(&self.path).unwrap();
-		write!(&mut file, "{}", ((value * self.max as f32) / 100.0).round() as u32).unwrap();
+	fn set(&mut self, value: f32) -> error::Result<()> {
+		let mut file = File::create(&self.path)?;
+		write!(&mut file, "{}", ((value * self.max as f32) / 100.0).round() as u32)?;
+
+		Ok(())
 	}
 }

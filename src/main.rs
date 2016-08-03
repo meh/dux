@@ -15,6 +15,8 @@
 // You should have received a copy of the GNU General Public License
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
+#![feature(question_mark, mpsc_select)]
+
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -30,15 +32,23 @@ extern crate xcb;
 extern crate xcb_util as xcbu;
 extern crate byteorder;
 
-use std::rc::Rc;
+use std::sync::Arc;
+
+mod error;
 
 mod backlight;
 use backlight::Backlight;
 
+mod interface;
+use interface::Interface;
+
+mod observer;
+use observer::Observer;
+
 fn main() {
 	env_logger::init().unwrap();
 
-	let (connection, screen) = xcb::Connection::connect(None).map(|(c, s)| (Rc::new(c), s)).expect("no display found");
+	let (connection, screen) = xcb::Connection::connect(None).map(|(c, s)| (Arc::new(c), s)).expect("no display found");
 	let backlight            = backlight::open(connection.clone(), screen).expect("no backlight support");
 
 	let mut app = App::new("dux")
@@ -115,35 +125,35 @@ fn main() {
 }
 
 pub fn get(_matches: &ArgMatches, mut backlight: Box<Backlight>) {
-	println!("{:.2}", backlight.get());
+	println!("{:.2}", backlight.get().unwrap());
 }
 
 pub fn set(matches: &ArgMatches, mut backlight: Box<Backlight>) {
-	fade(&mut backlight,
+	change(&mut backlight,
 		matches.value_of("PERCENTAGE").unwrap().parse().unwrap(),
 		matches.value_of("time").unwrap_or("200").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("20").parse().unwrap());
 }
 
 pub fn inc(matches: &ArgMatches, mut backlight: Box<Backlight>) {
-	let current = backlight.get();
+	let current = backlight.get().unwrap();
 
-	fade(&mut backlight,
+	change(&mut backlight,
 		current + matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap(),
 		matches.value_of("time").unwrap_or("0").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("0").parse().unwrap());
 }
 
 pub fn dec(matches: &ArgMatches, mut backlight: Box<Backlight>) {
-	let current = backlight.get();
+	let current = backlight.get().unwrap();
 
-	fade(&mut backlight,
+	change(&mut backlight,
 		current - matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap(),
 		matches.value_of("time").unwrap_or("0").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("0").parse().unwrap());
 }
 
-fn fade(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) {
+fn change(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) {
 	use std::thread;
 	use std::time::Duration;
 
@@ -157,16 +167,18 @@ fn fade(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) {
 		value
 	};
 
+	Interface::brightness(value);
+
 	if steps != 0 && time != 0 {
-		let mut current = backlight.get();
+		let mut current = backlight.get().unwrap();
 		let     step    = (value - current) as i32 / steps;
 
 		for _ in 0 .. steps {
 			current += step as f32;
-			backlight.set(current as f32);
+			backlight.set(current as f32).unwrap();
 			thread::sleep(Duration::from_millis((time / steps) as u64));
 		}
 	}
 
-	backlight.set(value);
+	backlight.set(value).unwrap();
 }
