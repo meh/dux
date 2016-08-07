@@ -20,18 +20,18 @@ use std::sync::Arc;
 use xcb;
 use byteorder::{NativeEndian, ReadBytesExt};
 
-use error;
+use {Display, error};
 
 pub struct Backlight {
-	connection: Arc<xcb::Connection>,
-	output:     xcb::randr::Output,
-	atom:       xcb::Atom,
-	range:      (i32, i32),
+	display: Arc<Display>,
+	output:  xcb::randr::Output,
+	atom:    xcb::Atom,
+	range:   (i32, i32),
 }
 
 impl Backlight {
-	pub fn open(connection: Arc<xcb::Connection>, screen: i32) -> error::Result<Self> {
-		fn find(c: &xcb::Connection, screen: i32) -> error::Result<(xcb::randr::Output, xcb::Atom)> {
+	pub fn open(display: Arc<Display>) -> error::Result<Self> {
+		fn find(c: &Display) -> error::Result<(xcb::randr::Output, xcb::Atom)> {
 			let current = xcb::intern_atom(c, true, "Backlight").get_reply().ok()
 				.and_then(|r| if r.atom() != xcb::ATOM_NONE { Some(r.atom()) } else { None })
 				.ok_or(error::Error::Unsupported)?;
@@ -40,7 +40,7 @@ impl Backlight {
 				.and_then(|r| if r.atom() != xcb::ATOM_NONE { Some(r.atom()) } else { None })
 				.ok_or(error::Error::Unsupported)?;
 
-			let screen    = c.get_setup().roots().nth(screen as usize).unwrap();
+			let screen    = c.get_setup().roots().nth(c.screen as usize).unwrap();
 			let resources = xcb::randr::get_screen_resources_current(c, screen.root()).get_reply()?;
 
 			for &id in resources.outputs() {
@@ -64,39 +64,34 @@ impl Backlight {
 			Err(error::Error::Unsupported)
 		}
 
-		let randr = xcb::randr::query_version(&connection, 1, 2).get_reply()?;
-		if randr.major_version() != 1 || randr.minor_version() < 2 {
-			return Err(error::Error::Unsupported);
-		}
-
-		let (output, atom) = find(&connection, screen)?;
+		let (output, atom) = find(&display)?;
 		let range          = {
-			let reply = xcb::randr::query_output_property(&connection, output, atom).get_reply()?;
+			let reply = xcb::randr::query_output_property(&display, output, atom).get_reply()?;
 			(reply.validValues()[0], reply.validValues()[1])
 		};
 
 		Ok(Backlight {
-			connection: connection,
-			output:     output,
-			atom:       atom,
-			range:      range,
+			display: display,
+			output:  output,
+			atom:    atom,
+			range:   range,
 		})
 	}
 }
 
 impl super::Backlight for Backlight {
 	fn get(&mut self) -> error::Result<f32> {
-		let raw = xcb::randr::get_output_property(&self.connection, self.output, self.atom, xcb::ATOM_NONE, 0, 4, false, false)
+		let raw = xcb::randr::get_output_property(&self.display, self.output, self.atom, xcb::ATOM_NONE, 0, 4, false, false)
 			.get_reply()?.data().read_i32::<NativeEndian>()?;
 
 		Ok(((raw - self.range.0) * 100) as f32 / (self.range.1 - self.range.0) as f32)
 	}
 
 	fn set(&mut self, value: f32) -> error::Result<()> {
-		xcb::randr::change_output_property(&self.connection, self.output, self.atom, xcb::ATOM_INTEGER, 32, xcb::PROP_MODE_REPLACE as u8,
+		xcb::randr::change_output_property(&self.display, self.output, self.atom, xcb::ATOM_INTEGER, 32, xcb::PROP_MODE_REPLACE as u8,
 			&[(self.range.0 + (value * (self.range.1 - self.range.0) as f32 / 100.0) as i32)]);
 
-		self.connection.flush();
+		self.display.flush();
 
 		Ok(())
 	}

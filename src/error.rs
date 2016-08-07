@@ -18,11 +18,11 @@
 use std::fmt;
 use std::error;
 use std::io;
-use std::ffi;
 
 use xcb;
 use dbus;
 use clap;
+use json;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -35,6 +35,7 @@ pub enum Error {
 	X(X),
 	DBus(DBus),
 	Cli(clap::Error),
+	Json(json::JsonError),
 }
 
 #[derive(Debug)]
@@ -59,6 +60,12 @@ impl From<io::Error> for Error {
 impl From<String> for Error {
 	fn from(value: String) -> Self {
 		Error::Message(value)
+	}
+}
+
+impl From<()> for Error {
+	fn from(_: ()) -> Self {
+		Error::Message("Something happened :(".into())
 	}
 }
 
@@ -89,6 +96,12 @@ impl From<dbus::Error> for Error {
 impl From<clap::Error> for Error {
 	fn from(value: clap::Error) -> Self {
 		Error::Cli(value)
+	}
+}
+
+impl From<json::JsonError> for Error {
+	fn from(value: json::JsonError) -> Self {
+		Error::Json(value)
 	}
 }
 
@@ -136,6 +149,9 @@ impl error::Error for Error {
 			},
 
 			Error::Cli(ref err) =>
+				err.description(),
+
+			Error::Json(ref err) =>
 				err.description(),
 		}
 	}

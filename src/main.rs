@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
-#![feature(question_mark, mpsc_select)]
+#![feature(question_mark, mpsc_select, type_ascription)]
 
 #[macro_use]
 extern crate log;
@@ -24,8 +24,9 @@ extern crate env_logger;
 extern crate clap;
 use clap::{ArgMatches, Arg, App, SubCommand};
 
+#[macro_use]
+extern crate json;
 extern crate xdg;
-extern crate toml;
 extern crate dbus;
 
 extern crate xcb;
@@ -35,21 +36,34 @@ extern crate byteorder;
 use std::sync::Arc;
 
 mod error;
+pub use error::Error;
+
+mod display;
+pub use display::Display;
+
+mod screen;
+pub use screen::Screen;
 
 mod backlight;
-use backlight::Backlight;
+pub use backlight::Backlight;
+
+mod timer;
+pub use timer::Timer;
 
 mod interface;
-use interface::Interface;
+pub use interface::Interface;
 
 mod observer;
-use observer::Observer;
+pub use observer::Observer;
+
+mod cache;
+pub use cache::Cache;
 
 fn main() {
 	env_logger::init().unwrap();
 
-	let (connection, screen) = xcb::Connection::connect(None).map(|(c, s)| (Arc::new(c), s)).expect("no display found");
-	let backlight            = backlight::open(connection.clone(), screen).expect("no backlight support");
+	let display   = Arc::new(Display::open().expect("no display found"));
+	let backlight = backlight::open(display.clone()).expect("no backlight support");
 
 	let mut app = App::new("dux")
 		.version(env!("CARGO_PKG_VERSION"))
@@ -103,7 +117,39 @@ fn main() {
 				.short("s")
 				.long("steps")
 				.takes_value(true)
-				.help("Number of steps in fade (default is 0).")));
+				.help("Number of steps in fade (default is 0).")))
+		.subcommand(SubCommand::with_name("adaptive")
+			.about("Adaptive brightness.")
+			.subcommand(SubCommand::with_name("start")
+				.about("Start the adaptive daemon.")
+				.arg(Arg::with_name("time")
+					.short("t")
+					.long("time")
+					.takes_value(true)
+					.help("Fade time in milliseconds (default is 200)."))
+				.arg(Arg::with_name("steps")
+					.short("s")
+					.long("steps")
+					.takes_value(true)
+					.help("Number of steps in fade (default is 20)."))
+				.arg(Arg::with_name("cache")
+						.short("c")
+						.long("cache")
+						.takes_value(true)
+						.help("The path to the cache file."))
+				.arg(Arg::with_name("prefer")
+						.short("p")
+						.long("prefer")
+						.takes_value(true)
+						.help("One of either `desktop`, `window`, `luminance`, `time` or `manual.")))
+			.subcommand(SubCommand::with_name("prefer")
+				.about("Change the adaption preferences.")
+				.arg(Arg::with_name("TYPE")
+					.required(true)
+					.index(1)
+					.help("One of either `desktop`, `window`, `luminance` or `time`.")))
+			.subcommand(SubCommand::with_name("stop")
+				.about("Stop the adaptive brightness daemon.")));
 
 	let matches = app.clone().get_matches();
 	match matches.subcommand() {
@@ -119,6 +165,21 @@ fn main() {
 		("dec", Some(submatches)) =>
 			dec(submatches, backlight),
 
+		("adaptive", Some(submatches)) =>
+			match submatches.subcommand() {
+				("prefer", Some(submatches)) =>
+					Interface::prefer(submatches.value_of("TYPE").unwrap()).unwrap(),
+
+				("stop", Some(_)) =>
+					Interface::stop().unwrap(),
+
+				("start", Some(submatches)) =>
+					adaptive(submatches, display, backlight),
+
+				_ =>
+					app.print_help().unwrap(),
+			},
+
 		_ =>
 			app.print_help().unwrap()
 	}
@@ -129,56 +190,154 @@ pub fn get(_matches: &ArgMatches, mut backlight: Box<Backlight>) {
 }
 
 pub fn set(matches: &ArgMatches, mut backlight: Box<Backlight>) {
-	change(&mut backlight,
-		matches.value_of("PERCENTAGE").unwrap().parse().unwrap(),
+	let value = matches.value_of("PERCENTAGE").unwrap().parse().unwrap();
+	let _     = Interface::brightness(value);
+
+	backlight::fade(&mut backlight, value,
 		matches.value_of("time").unwrap_or("200").parse().unwrap(),
-		matches.value_of("steps").unwrap_or("20").parse().unwrap());
+		matches.value_of("steps").unwrap_or("20").parse().unwrap()).unwrap();
 }
 
 pub fn inc(matches: &ArgMatches, mut backlight: Box<Backlight>) {
-	let current = backlight.get().unwrap();
+	let value = backlight.get().unwrap() + matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap();
+	let _     = Interface::brightness(value);
 
-	change(&mut backlight,
-		current + matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap(),
+	backlight::fade(&mut backlight, value,
 		matches.value_of("time").unwrap_or("0").parse().unwrap(),
-		matches.value_of("steps").unwrap_or("0").parse().unwrap());
+		matches.value_of("steps").unwrap_or("0").parse().unwrap()).unwrap();
 }
 
 pub fn dec(matches: &ArgMatches, mut backlight: Box<Backlight>) {
-	let current = backlight.get().unwrap();
+	let value = backlight.get().unwrap() - matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap();
+	let _     = Interface::brightness(value);
 
-	change(&mut backlight,
-		current - matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap(),
+	backlight::fade(&mut backlight, value,
 		matches.value_of("time").unwrap_or("0").parse().unwrap(),
-		matches.value_of("steps").unwrap_or("0").parse().unwrap());
+		matches.value_of("steps").unwrap_or("0").parse().unwrap()).unwrap();
 }
 
-fn change(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) {
-	use std::thread;
-	use std::time::Duration;
+pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<Backlight>) {
+	use std::time::{Duration, Instant, SystemTime};
 
-	let value = if value > 100.0 {
-		100.0
+	let time  = matches.value_of("time").unwrap_or("200").parse().unwrap();
+	let steps = matches.value_of("steps").unwrap_or("20").parse().unwrap();
+
+	let     interface = Interface::spawn().unwrap();
+	let     observer  = Observer::spawn(display.clone()).unwrap();
+	let     timer     = Timer::spawn().unwrap();
+	let mut cache     = Cache::open(display.clone(), matches.value_of("cache")).unwrap();
+	let mut screen    = Screen::open(display.clone()).unwrap();
+
+	let mut prefer     = interface::Prefer::parse(matches.value_of("prefer").unwrap_or("luminance")).unwrap();
+	let mut active     = None;
+	let mut desktop    = 0;
+	let mut changing   = Instant::now() - Duration::from_secs(42);
+	let mut brightness = 0.0;
+
+	macro_rules! preference {
+		($value:expr) =>(
+			match $value {
+				interface::Prefer::Manual =>
+					cache::Preference::Manual,
+
+				interface::Prefer::Desktop =>
+					cache::Preference::Desktop(desktop),
+
+				interface::Prefer::Window =>
+					cache::Preference::Window(active),
+
+				interface::Prefer::Luminance =>
+					cache::Preference::Luminance(screen.luminance()),
+
+				interface::Prefer::Time =>
+					cache::Preference::Time(SystemTime::now()),
+			}
+		);
 	}
-	else if value < 0.0 {
-		0.0
+
+	macro_rules! fade {
+		($value:expr) => (
+			match $value {
+				v if v != brightness => {
+					brightness = v;
+					backlight::fade(&mut backlight, v, time, steps)
+				}
+
+				_ => {
+					Ok(())
+				}
+			}
+		)
 	}
-	else {
-		value
-	};
 
-	Interface::brightness(value);
+	loop {
+		select! {
+			event = timer.recv() => {
+				match event.unwrap() {
+					timer::Event::Save => {
+						cache.save().unwrap();
+					}
+				}
+			},
 
-	if steps != 0 && time != 0 {
-		let mut current = backlight.get().unwrap();
-		let     step    = (value - current) as i32 / steps;
+			event = interface.recv() => {
+				match event.unwrap() {
+					interface::Event::Brightness(value) => {
+						changing = Instant::now();
+						cache.set(preference!(prefer), value).unwrap();
+					}
 
-		for _ in 0 .. steps {
-			current += step as f32;
-			backlight.set(current as f32).unwrap();
-			thread::sleep(Duration::from_millis((time / steps) as u64));
+					interface::Event::Prefer(value) => {
+						prefer = value;
+
+						if let Some(value) = cache.get(preference!(value)).unwrap() {
+							fade!(value).unwrap();
+						}
+					}
+
+					interface::Event::Stop => {
+						break;
+					}
+				}
+			},
+
+			event = observer.recv() => {
+				match event.unwrap() {
+					observer::Event::Show(_) | observer::Event::Hide(_) | observer::Event::Change(_) => (),
+
+					observer::Event::Damage(rect) => {
+						if prefer == interface::Prefer::Luminance {
+							screen.refresh(rect.x() as u32, rect.y() as u32, rect.width() as u32, rect.height() as u32).unwrap();
+
+							if changing.elapsed().as_secs() >= 1 {
+								if let Some(value) = cache.get(cache::Preference::Luminance(screen.luminance())).unwrap() {
+									fade!(value).unwrap()
+								}
+							}
+						}
+					}
+
+					observer::Event::Active(value) => {
+						active = value;
+
+						if prefer == interface::Prefer::Window {
+							if let Some(value) = cache.get(cache::Preference::Window(active)).unwrap() {
+								fade!(value).unwrap();
+							}
+						}
+					}
+
+					observer::Event::Desktop(id) => {
+						desktop = id;
+
+						if prefer == interface::Prefer::Desktop {
+							if let Some(value) = cache.get(cache::Preference::Desktop(desktop)).unwrap() {
+								fade!(value).unwrap();
+							}
+						}
+					}
+				}
+			}
 		}
 	}
-
-	backlight.set(value).unwrap();
 }

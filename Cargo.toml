@@ -1,7 +1,16 @@
 [package]
-name = "dux"
+name    = "dux"
 version = "0.1.0"
+
 authors = ["meh. <meh@schizofreni.co>"]
+license = "GPL-3.0"
+
+description = "X11 backlight manager."
+repository  = "https://github.com/meh/screenruster"
+keywords    = ["x11", "graphics"]
+
+[profile.release]
+debug = true
 
 [dependencies]
 log        = "0.3"
@@ -9,9 +18,9 @@ env_logger = "0.3"
 
 clap = "2"
 xdg  = "2"
-toml = "0.1"
+json = "0.10"
 dbus = "0.3"
 
-xcb       = { version = "0.7", features = ["randr"] }
-xcb-util  = { version = "0.1", features = ["icccm", "ewmh"], path = "../xcb-util" }
+xcb       = { version = "0.7", features = ["randr", "damage"] }
+xcb-util  = { version = "0.1", features = ["icccm", "ewmh", "image", "shm"] }
 byteorder = "0.5"

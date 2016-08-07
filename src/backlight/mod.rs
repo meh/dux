@@ -16,9 +16,8 @@
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
-use xcb;
 
-use error;
+use {Display, error};
 
 pub trait Backlight {
 	fn get(&mut self) -> error::Result<f32>;
@@ -28,8 +27,8 @@ pub trait Backlight {
 mod randr;
 mod sys;
 
-pub fn open(connection: Arc<xcb::Connection>, screen: i32) -> error::Result<Box<Backlight>> {
-	if let Ok(backlight) = randr::Backlight::open(connection.clone(), screen) {
+pub fn open(display: Arc<Display>) -> error::Result<Box<Backlight>> {
+	if let Ok(backlight) = randr::Backlight::open(display.clone()) {
 		Ok(Box::new(backlight))
 	}
 	else if let Ok(backlight) = sys::Backlight::open() {
@@ -38,4 +37,36 @@ pub fn open(connection: Arc<xcb::Connection>, screen: i32) -> error::Result<Box<
 	else {
 		Err(error::Error::Unsupported)
 	}
+}
+
+pub fn normalize(value: f32) -> f32 {
+	if value > 100.0 {
+		100.0
+	}
+	else if value < 0.0 {
+		0.0
+	}
+	else {
+		value
+	}
+}
+
+pub fn fade(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) -> error::Result<()> {
+	use std::thread;
+	use std::time::Duration;
+
+	let value = normalize(value);
+
+	if steps != 0 && time != 0 {
+		let mut current = backlight.get()?;
+		let     step    = (value - current) as i32 / steps;
+
+		for _ in 0 .. steps {
+			current += step as f32;
+			backlight.set(current as f32)?;
+			thread::sleep(Duration::from_millis((time / steps) as u64));
+		}
+	}
+
+	backlight.set(value)
 }
