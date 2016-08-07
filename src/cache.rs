@@ -178,13 +178,11 @@ impl Cache {
 						let before = slice.get(index.overflowing_sub(1).0).map(|v| (v[0].as_u8().unwrap(), v[1].as_f32().unwrap()));
 						let after  = slice.get(index).map(|v| (v[0].as_u8().unwrap(), v[1].as_f32().unwrap()));
 
-						return match (before, after) {
-							(None, None) => {
-								Ok(None)
-							}
+						match (before, after) {
+							(None, None) => (),
 
 							(Some((_, value)), None) | (None, Some((_, value))) => {
-								Ok(Some(value))
+								return Ok(Some(value));
 							}
 
 							(Some((a1, a2)), Some((c1, c2))) => {
@@ -204,12 +202,12 @@ impl Cache {
 									}
 								};
 
-								Ok(Some({
+								return Ok(Some({
 									let x = f32::min(a2, c2);
 									let y = f32::max(a2, c2);
 
 									x + ((p * (y - x)) / 100.0)
-								}))
+								}));
 							}
 						};
 					}
