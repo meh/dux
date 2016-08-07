@@ -173,13 +173,29 @@ impl Cache {
 								Ok(Some(value))
 							}
 
-							(Some((a, a_value)), Some((b, b_value))) => {
-								if luma - a < b - luma {
-									Ok(Some(a_value))
-								}
-								else {
-									Ok(Some(b_value))
-								}
+							(Some((a1, a2)), Some((c1, c2))) => {
+								let a1 = a1 as f32;
+								let b1 = luma as f32;
+								let c1 = c1 as f32;
+
+								let p = {
+									let x = b1 - a1;
+									let y = c1 - a1;
+
+									if a2 < c2 {
+										(x * 100.0) / y
+									}
+									else {
+										100.0 - ((x * 100.0) / y)
+									}
+								};
+
+								Ok(Some({
+									let x = f32::min(a2, c2);
+									let y = f32::max(a2, c2);
+
+									x + ((p * (y - x)) / 100.0)
+								}))
 							}
 						};
 					}
