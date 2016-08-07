@@ -29,13 +29,15 @@ pub struct Interface {
 
 #[derive(Debug)]
 pub enum Event {
-	Prefer(Prefer),
+	Mode(Mode),
+	Profile(String),
 	Brightness(f32),
+	Save,
 	Stop,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
-pub enum Prefer {
+pub enum Mode {
 	Manual,
 	Desktop,
 	Window,
@@ -43,33 +45,45 @@ pub enum Prefer {
 	Time,
 }
 
-impl Default for Prefer {
+impl Default for Mode {
 	fn default() -> Self {
-		Prefer::Luminance
+		Mode::Luminance
 	}
 }
 
-impl Prefer {
-	pub fn parse<T: AsRef<str>>(value: T) -> Option<Prefer> {
+impl Mode {
+	pub fn parse<T: AsRef<str>>(value: T) -> Option<Mode> {
 		match value.as_ref() {
-			"manual"    => Some(Prefer::Manual),
-			"desktop"   => Some(Prefer::Desktop),
-			"window"    => Some(Prefer::Window),
-			"luminance" => Some(Prefer::Luminance),
-			"time"      => Some(Prefer::Time),
+			"manual"    => Some(Mode::Manual),
+			"desktop"   => Some(Mode::Desktop),
+			"window"    => Some(Mode::Window),
+			"luminance" => Some(Mode::Luminance),
+			"time"      => Some(Mode::Time),
 			_           => None,
 		}
 	}
 }
 
 impl Interface {
-	pub fn prefer<T: Into<String>>(value: T) -> error::Result<()> {
+	pub fn mode<T: Into<String>>(value: T) -> error::Result<()> {
 		dbus::Connection::get_private(dbus::BusType::Session)?
 			.send(dbus::Message::new_method_call(
 				"meh.rust.Backlight",
 				"/meh/rust/Backlight",
 				"meh.rust.Backlight",
-				"Prefer")?
+				"Mode")?
+					.append1(value.into()))?;
+
+		Ok(())
+	}
+
+	pub fn profile<T: Into<String>>(value: T) -> error::Result<()> {
+		dbus::Connection::get_private(dbus::BusType::Session)?
+			.send(dbus::Message::new_method_call(
+				"meh.rust.Backlight",
+				"/meh/rust/Backlight",
+				"meh.rust.Backlight",
+				"Profile")?
 					.append1(value.into()))?;
 
 		Ok(())
@@ -83,6 +97,17 @@ impl Interface {
 				"meh.rust.Backlight",
 				"Brightness")?
 					.append1(backlight::normalize(value) as f64))?;
+
+		Ok(())
+	}
+
+	pub fn save() -> error::Result<()> {
+		dbus::Connection::get_private(dbus::BusType::Session)?
+			.send(dbus::Message::new_method_call(
+				"meh.rust.Backlight",
+				"/meh/rust/Backlight",
+				"meh.rust.Backlight",
+				"Save")?)?;
 
 		Ok(())
 	}
@@ -151,16 +176,27 @@ impl Interface {
 			dbus!(ready);
 
 			let tree = f.tree().add(f.object_path("/meh/rust/Backlight").introspectable().add(f.interface("meh.rust.Backlight")
-				.add_m(f.method("Prefer", |m, _, _| {
-					if let Some(value) = m.get1::<String>().and_then(Prefer::parse) {
-						sender.send(Event::Prefer(value)).unwrap();
+				.add_m(f.method("Mode", |m, _, _| {
+					if let Some(value) = m.get1::<String>().and_then(Mode::parse) {
+						sender.send(Event::Mode(value)).unwrap();
 
 						Ok(vec![m.method_return()])
 					}
 					else {
 						Err(dbus::tree::MethodErr::no_arg())
 					}
-				}).inarg::<String, _>("type"))
+				}).inarg::<String, _>("mode"))
+
+				.add_m(f.method("Profile", |m, _, _| {
+					if let Some(value) = m.get1::<String>() {
+						sender.send(Event::Profile(value)).unwrap();
+
+						Ok(vec![m.method_return()])
+					}
+					else {
+						Err(dbus::tree::MethodErr::no_arg())
+					}
+				}).inarg::<String, _>("profile"))
 
 				.add_m(f.method("Brightness", |m, _, _| {
 					if let Some(value) = m.get1::<f64>() {
@@ -173,11 +209,17 @@ impl Interface {
 					}
 				}).inarg::<f64, _>("value"))
 
+				.add_m(f.method("Save", |m, _, _| {
+					sender.send(Event::Save).unwrap();
+
+					Ok(vec![m.method_return()])
+				}))
+
 				.add_m(f.method("Stop", |m, _, _| {
 					sender.send(Event::Stop).unwrap();
 
 					Ok(vec![m.method_return()])
-				}).inarg::<f64, _>("value"))));
+				}))));
 
 			tree.set_registered(&c, true).unwrap();
 			for _ in tree.run(&c, c.iter(1_000_000)) { }

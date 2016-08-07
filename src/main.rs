@@ -131,21 +131,34 @@ fn main() {
 				.takes_value(true)
 				.help("Step to increase the brightness by (default is 1.0)."))
 			.arg(Arg::with_name("cache")
-					.short("c")
-					.long("cache")
-					.takes_value(true)
-					.help("The path to the cache file."))
-			.arg(Arg::with_name("prefer")
-					.short("p")
-					.long("prefer")
-					.takes_value(true)
-					.help("One of either `desktop`, `window`, `luminance`, `time` or `manual.")))
-		.subcommand(SubCommand::with_name("prefer")
-			.about("Change the adaption preferences.")
-			.arg(Arg::with_name("TYPE")
+				.short("c")
+				.long("cache")
+				.takes_value(true)
+				.help("The path to the cache file."))
+			.arg(Arg::with_name("profile")
+				.short("p")
+				.long("profile")
+				.takes_value(true)
+				.help("The profile name (default is `default`)."))
+			.arg(Arg::with_name("mode")
+				.short("m")
+				.long("mode")
+				.takes_value(true)
+				.help("One of either `desktop`, `window`, `luminance`, `time` or `manual.")))
+		.subcommand(SubCommand::with_name("mode")
+			.about("Change the adaption mode.")
+			.arg(Arg::with_name("MODE")
 				.required(true)
 				.index(1)
 				.help("One of either `desktop`, `window`, `luminance` or `time`.")))
+		.subcommand(SubCommand::with_name("profile")
+			.about("Change the adaption profile.")
+			.arg(Arg::with_name("PROFILE")
+				.required(true)
+				.index(1)
+				.help("The profile name.")))
+		.subcommand(SubCommand::with_name("save")
+			.about("Force flush the cache to disk."))
 		.subcommand(SubCommand::with_name("stop")
 			.about("Stop adaptive brightness mode."));
 
@@ -166,8 +179,14 @@ fn main() {
 		("adaptive", Some(submatches)) =>
 			adaptive(submatches, display, backlight),
 
-		("prefer", Some(submatches)) =>
-			Interface::prefer(submatches.value_of("TYPE").unwrap()).unwrap(),
+		("mode", Some(submatches)) =>
+			Interface::mode(submatches.value_of("MODE").unwrap()).unwrap(),
+
+		("profile", Some(submatches)) =>
+			Interface::profile(submatches.value_of("PROFILE").unwrap()).unwrap(),
+
+		("save", Some(_)) =>
+			Interface::save().unwrap(),
 
 		("stop", Some(_)) =>
 			Interface::stop().unwrap(),
@@ -220,29 +239,33 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 	let mut cache     = Cache::open(display.clone(), matches.value_of("cache")).unwrap();
 	let mut screen    = Screen::open(display.clone()).unwrap();
 
-	let mut prefer     = interface::Prefer::parse(matches.value_of("prefer").unwrap_or("luminance")).unwrap();
+	if let Some(profile) = matches.value_of("profile") {
+		cache.profile(profile);
+	}
+
+	let mut mode       = interface::Mode::parse(matches.value_of("mode").unwrap_or("luminance")).unwrap();
 	let mut active     = None;
 	let mut desktop    = 0;
 	let mut changing   = Instant::now() - Duration::from_secs(42);
 	let mut brightness = 0.0;
 
-	macro_rules! preference {
+	macro_rules! mode {
 		($value:expr) =>(
 			match $value {
-				interface::Prefer::Manual =>
-					cache::Preference::Manual,
+				interface::Mode::Manual =>
+					cache::Mode::Manual,
 
-				interface::Prefer::Desktop =>
-					cache::Preference::Desktop(desktop),
+				interface::Mode::Desktop =>
+					cache::Mode::Desktop(desktop),
 
-				interface::Prefer::Window =>
-					cache::Preference::Window(active),
+				interface::Mode::Window =>
+					cache::Mode::Window(active),
 
-				interface::Prefer::Luminance =>
-					cache::Preference::Luminance(screen.luminance()),
+				interface::Mode::Luminance =>
+					cache::Mode::Luminance(screen.luminance()),
 
-				interface::Prefer::Time =>
-					cache::Preference::Time(SystemTime::now()),
+				interface::Mode::Time =>
+					cache::Mode::Time(SystemTime::now()),
 			}
 		);
 	}
@@ -274,17 +297,25 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 
 			event = interface.recv() => {
 				match event.unwrap() {
-					interface::Event::Brightness(value) => {
-						changing = Instant::now();
-						cache.set(preference!(prefer), value).unwrap();
-					}
+					interface::Event::Mode(value) => {
+						mode = value;
 
-					interface::Event::Prefer(value) => {
-						prefer = value;
-
-						if let Some(value) = cache.get(preference!(value)).unwrap() {
+						if let Some(value) = cache.get(mode!(value)).unwrap() {
 							fade!(value).unwrap();
 						}
+					}
+
+					interface::Event::Profile(name) => {
+						cache.profile(name);
+					}
+					
+					interface::Event::Save => {
+						cache.save().unwrap();
+					}
+
+					interface::Event::Brightness(value) => {
+						changing = Instant::now();
+						cache.set(mode!(mode), value).unwrap();
 					}
 
 					interface::Event::Stop => {
@@ -298,11 +329,11 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 					observer::Event::Show(_) | observer::Event::Hide(_) | observer::Event::Change(_) => (),
 
 					observer::Event::Damage(rect) => {
-						if prefer == interface::Prefer::Luminance {
+						if mode == interface::Mode::Luminance {
 							screen.refresh(rect.x() as u32, rect.y() as u32, rect.width() as u32, rect.height() as u32).unwrap();
 
 							if changing.elapsed().as_secs() >= 1 {
-								if let Some(value) = cache.get(cache::Preference::Luminance(screen.luminance())).unwrap() {
+								if let Some(value) = cache.get(cache::Mode::Luminance(screen.luminance())).unwrap() {
 									fade!(value).unwrap()
 								}
 							}
@@ -312,8 +343,8 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 					observer::Event::Active(value) => {
 						active = value;
 
-						if prefer == interface::Prefer::Window {
-							if let Some(value) = cache.get(cache::Preference::Window(active)).unwrap() {
+						if mode == interface::Mode::Window {
+							if let Some(value) = cache.get(cache::Mode::Window(active)).unwrap() {
 								fade!(value).unwrap();
 							}
 						}
@@ -322,8 +353,8 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 					observer::Event::Desktop(id) => {
 						desktop = id;
 
-						if prefer == interface::Prefer::Desktop {
-							if let Some(value) = cache.get(cache::Preference::Desktop(desktop)).unwrap() {
+						if mode == interface::Mode::Desktop {
+							if let Some(value) = cache.get(cache::Mode::Desktop(desktop)).unwrap() {
 								fade!(value).unwrap();
 							}
 						}

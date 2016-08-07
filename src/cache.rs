@@ -32,9 +32,10 @@ pub struct Cache {
 	display: Arc<Display>,
 	data:    JsonValue,
 	path:    PathBuf,
+	profile: String,
 }
 
-pub enum Preference {
+pub enum Mode {
 	Manual,
 	Desktop(i32),
 	Window(Option<xcb::Window>),
@@ -52,7 +53,7 @@ impl Cache {
 				.place_config_file("cache.json").unwrap()
 		};
 
-		let data = if path.exists() {
+		let mut data = if path.exists() {
 			let mut file    = File::open(&path)?;
 			let mut content = String::new();
 			file.read_to_string(&mut content)?;
@@ -63,10 +64,15 @@ impl Cache {
 			object!{}
 		};
 
+		if data["default"].is_null() {
+			data["default"] = object!{};
+		}
+
 		Ok(Cache {
 			display: display,
 			data:    data,
 			path:    path,
+			profile: "default".into(),
 		})
 	}
 
@@ -77,37 +83,45 @@ impl Cache {
 		Ok(())
 	}
 
-	pub fn set(&mut self, target: Preference, value: f32) -> error::Result<()> {
-		match target {
-			Preference::Manual => (),
+	pub fn profile<T: Into<String>>(&mut self, name: T) {
+		self.profile = name.into();
 
-			Preference::Desktop(id) => {
-				if self.data["desktop"].is_null() {
-					self.data["desktop"] = object!{};
+		if self.data[&self.profile].is_null() {
+			self.data[&self.profile] = object!{};
+		}
+	}
+
+	pub fn set(&mut self, mode: Mode, value: f32) -> error::Result<()> {
+		match mode {
+			Mode::Manual => (),
+
+			Mode::Desktop(id) => {
+				if self.data[&self.profile]["desktop"].is_null() {
+					self.data[&self.profile]["desktop"] = object!{};
 				}
 
-				self.data["desktop"][id.to_string()] = value.into();
+				self.data[&self.profile]["desktop"][id.to_string()] = value.into();
 			}
 
-			Preference::Window(active) => {
+			Mode::Window(active) => {
 				if let Some(id) = active {
-					if self.data["window"].is_null() {
-						self.data["window"] = object!{};
+					if self.data[&self.profile]["window"].is_null() {
+						self.data[&self.profile]["window"] = object!{};
 					}
 
 					let name = xcbu::icccm::get_wm_class(&self.display, id).get_reply()?;
 
-					self.data["window"][name.instance()] = value.into();
-					self.data["window"][name.class()]    = value.into();
+					self.data[&self.profile]["window"][name.instance()] = value.into();
+					self.data[&self.profile]["window"][name.class()]    = value.into();
 				}
 			}
 
-			Preference::Luminance(luma) => {
-				if self.data["luminance"].is_null() {
-					self.data["luminance"] = array!{};
+			Mode::Luminance(luma) => {
+				if self.data[&self.profile]["luminance"].is_null() {
+					self.data[&self.profile]["luminance"] = array!{};
 				}
 
-				if let JsonValue::Array(ref mut array) = self.data["luminance"] {
+				if let JsonValue::Array(ref mut array) = self.data[&self.profile]["luminance"] {
 					let luma = luma.round() as u8;
 
 					match array.binary_search_by_key(&luma, |v| v[0].as_u8().unwrap()) {
@@ -120,7 +134,7 @@ impl Cache {
 				}
 			}
 
-			Preference::Time(time) => {
+			Mode::Time(time) => {
 				// TODO: it
 			}
 		}
@@ -128,32 +142,32 @@ impl Cache {
 		Ok(())
 	}
 
-	pub fn get(&mut self, target: Preference) -> error::Result<Option<f32>> {
-		match target {
-			Preference::Manual => (),
+	pub fn get(&mut self, mode: Mode) -> error::Result<Option<f32>> {
+		match mode {
+			Mode::Manual => (),
 
-			Preference::Desktop(id) => {
-				if let Some(value) = self.data["desktop"][id.to_string()].as_f32() {
+			Mode::Desktop(id) => {
+				if let Some(value) = self.data[&self.profile]["desktop"][id.to_string()].as_f32() {
 					return Ok(Some(value))
 				}
 			}
 
-			Preference::Window(active) => {
+			Mode::Window(active) => {
 				if let Some(id) = active {
 					let name = xcbu::icccm::get_wm_class(&self.display, id).get_reply()?;
 
-					if let Some(value) = self.data["window"][name.instance()].as_f32() {
+					if let Some(value) = self.data[&self.profile]["window"][name.instance()].as_f32() {
 						return Ok(Some(value));
 					}
 
-					if let Some(value) = self.data["window"][name.class()].as_f32() {
+					if let Some(value) = self.data[&self.profile]["window"][name.class()].as_f32() {
 						return Ok(Some(value));
 					}
 				}
 			}
 
-			Preference::Luminance(luma) => {
-				if let JsonValue::Array(ref slice) = self.data["luminance"] {
+			Mode::Luminance(luma) => {
+				if let JsonValue::Array(ref slice) = self.data[&self.profile]["luminance"] {
 					let luma = luma.round() as u8;
 
 					if !slice.is_empty() {
@@ -202,7 +216,7 @@ impl Cache {
 				}
 			}
 
-			Preference::Time(time) => {
+			Mode::Time(time) => {
 				// TODO: it
 			}
 		}
