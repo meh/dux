@@ -174,7 +174,7 @@ impl Cache {
 							}
 
 							(Some((a, a_value)), Some((b, b_value))) => {
-								if luma - a > b - luma {
+								if luma - a < b - luma {
 									Ok(Some(a_value))
 								}
 								else {
