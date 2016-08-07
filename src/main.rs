@@ -119,37 +119,35 @@ fn main() {
 				.takes_value(true)
 				.help("Number of steps in fade (default is 0).")))
 		.subcommand(SubCommand::with_name("adaptive")
-			.about("Adaptive brightness.")
-			.subcommand(SubCommand::with_name("start")
-				.about("Start the adaptive daemon.")
-				.arg(Arg::with_name("time")
-					.short("t")
-					.long("time")
+			.about("Start adaptive brightness.")
+			.arg(Arg::with_name("time")
+				.short("t")
+				.long("time")
+				.takes_value(true)
+				.help("Fade time in milliseconds (default is 200)."))
+			.arg(Arg::with_name("steps")
+				.short("s")
+				.long("steps")
+				.takes_value(true)
+				.help("Number of steps in fade (default is 20)."))
+			.arg(Arg::with_name("cache")
+					.short("c")
+					.long("cache")
 					.takes_value(true)
-					.help("Fade time in milliseconds (default is 200)."))
-				.arg(Arg::with_name("steps")
-					.short("s")
-					.long("steps")
+					.help("The path to the cache file."))
+			.arg(Arg::with_name("prefer")
+					.short("p")
+					.long("prefer")
 					.takes_value(true)
-					.help("Number of steps in fade (default is 20)."))
-				.arg(Arg::with_name("cache")
-						.short("c")
-						.long("cache")
-						.takes_value(true)
-						.help("The path to the cache file."))
-				.arg(Arg::with_name("prefer")
-						.short("p")
-						.long("prefer")
-						.takes_value(true)
-						.help("One of either `desktop`, `window`, `luminance`, `time` or `manual.")))
-			.subcommand(SubCommand::with_name("prefer")
-				.about("Change the adaption preferences.")
-				.arg(Arg::with_name("TYPE")
-					.required(true)
-					.index(1)
-					.help("One of either `desktop`, `window`, `luminance` or `time`.")))
-			.subcommand(SubCommand::with_name("stop")
-				.about("Stop the adaptive brightness daemon.")));
+					.help("One of either `desktop`, `window`, `luminance`, `time` or `manual.")))
+		.subcommand(SubCommand::with_name("prefer")
+			.about("Change the adaption preferences.")
+			.arg(Arg::with_name("TYPE")
+				.required(true)
+				.index(1)
+				.help("One of either `desktop`, `window`, `luminance` or `time`.")))
+		.subcommand(SubCommand::with_name("stop")
+			.about("Stop adaptive brightness mode."));
 
 	let matches = app.clone().get_matches();
 	match matches.subcommand() {
@@ -166,19 +164,13 @@ fn main() {
 			dec(submatches, backlight),
 
 		("adaptive", Some(submatches)) =>
-			match submatches.subcommand() {
-				("prefer", Some(submatches)) =>
-					Interface::prefer(submatches.value_of("TYPE").unwrap()).unwrap(),
+			adaptive(submatches, display, backlight),
 
-				("stop", Some(_)) =>
-					Interface::stop().unwrap(),
+		("prefer", Some(submatches)) =>
+			Interface::prefer(submatches.value_of("TYPE").unwrap()).unwrap(),
 
-				("start", Some(submatches)) =>
-					adaptive(submatches, display, backlight),
-
-				_ =>
-					app.print_help().unwrap(),
-			},
+		("stop", Some(_)) =>
+			Interface::stop().unwrap(),
 
 		_ =>
 			app.print_help().unwrap()
