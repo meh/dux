@@ -51,22 +51,48 @@ pub fn normalize(value: f32) -> f32 {
 	}
 }
 
-pub fn fade(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) -> error::Result<()> {
+pub mod fade {
 	use std::thread;
 	use std::time::Duration;
+	use std::f32;
+	use super::{Backlight, normalize};
+	use error;
 
-	let value = normalize(value);
+	pub fn by_time(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) -> error::Result<()> {
+		let value = normalize(value);
 
-	if steps != 0 && time != 0 {
-		let mut current = backlight.get()?;
-		let     step    = (value - current) as i32 / steps;
+		if steps != 0 && time != 0 {
+			let mut current = backlight.get()?;
+			let     step    = (value - current) as i32 / steps;
+			let     sleep   = (time / steps) as u64;
 
-		for _ in 0 .. steps {
-			current += step as f32;
-			backlight.set(current as f32)?;
-			thread::sleep(Duration::from_millis((time / steps) as u64));
+			for _ in 0 .. steps {
+				current += step as f32;
+				backlight.set(current)?;
+				thread::sleep(Duration::from_millis(sleep));
+			}
 		}
+
+		backlight.set(value)
 	}
 
-	backlight.set(value)
+	pub fn by_step(backlight: &mut Box<Backlight>, value: f32, step: f32, time: u64) -> error::Result<()> {
+		if time != 0 {
+			let mut current = backlight.get()?;
+			let     step    = if current > value { -step } else { step };
+
+			loop {
+				current += step;
+
+				if (step.is_sign_negative() && current < value) || (!step.is_sign_negative() && current > value) {
+					break;
+				}
+
+				backlight.set(current)?;
+				thread::sleep(Duration::from_millis(time));
+			}
+		}
+
+		backlight.set(value)
+	}
 }

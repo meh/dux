@@ -124,12 +124,12 @@ fn main() {
 				.short("t")
 				.long("time")
 				.takes_value(true)
-				.help("Fade time in milliseconds (default is 200)."))
-			.arg(Arg::with_name("steps")
+				.help("Time to sleep between each step (default is 5)."))
+			.arg(Arg::with_name("step")
 				.short("s")
-				.long("steps")
+				.long("step")
 				.takes_value(true)
-				.help("Number of steps in fade (default is 20)."))
+				.help("Step to increase the brightness by (default is 1.0)."))
 			.arg(Arg::with_name("cache")
 					.short("c")
 					.long("cache")
@@ -185,7 +185,7 @@ pub fn set(matches: &ArgMatches, mut backlight: Box<Backlight>) {
 	let value = matches.value_of("PERCENTAGE").unwrap().parse().unwrap();
 	let _     = Interface::brightness(value);
 
-	backlight::fade(&mut backlight, value,
+	backlight::fade::by_time(&mut backlight, value,
 		matches.value_of("time").unwrap_or("200").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("20").parse().unwrap()).unwrap();
 }
@@ -194,7 +194,7 @@ pub fn inc(matches: &ArgMatches, mut backlight: Box<Backlight>) {
 	let value = backlight.get().unwrap() + matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap();
 	let _     = Interface::brightness(value);
 
-	backlight::fade(&mut backlight, value,
+	backlight::fade::by_time(&mut backlight, value,
 		matches.value_of("time").unwrap_or("0").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("0").parse().unwrap()).unwrap();
 }
@@ -203,7 +203,7 @@ pub fn dec(matches: &ArgMatches, mut backlight: Box<Backlight>) {
 	let value = backlight.get().unwrap() - matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap();
 	let _     = Interface::brightness(value);
 
-	backlight::fade(&mut backlight, value,
+	backlight::fade::by_time(&mut backlight, value,
 		matches.value_of("time").unwrap_or("0").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("0").parse().unwrap()).unwrap();
 }
@@ -211,8 +211,8 @@ pub fn dec(matches: &ArgMatches, mut backlight: Box<Backlight>) {
 pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<Backlight>) {
 	use std::time::{Duration, Instant, SystemTime};
 
-	let time  = matches.value_of("time").unwrap_or("200").parse().unwrap();
-	let steps = matches.value_of("steps").unwrap_or("20").parse().unwrap();
+	let time = matches.value_of("time").unwrap_or("5").parse().unwrap();
+	let step = matches.value_of("step").unwrap_or("1.0").parse().unwrap();
 
 	let     interface = Interface::spawn().unwrap();
 	let     observer  = Observer::spawn(display.clone()).unwrap();
@@ -252,7 +252,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 			match $value {
 				v if v != brightness => {
 					brightness = v;
-					backlight::fade(&mut backlight, v, time, steps)
+					backlight::fade::by_step(&mut backlight, v, step, time)
 				}
 
 				_ => {
