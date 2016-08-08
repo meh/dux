@@ -251,7 +251,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 	let mut mode        = interface::Mode::parse(matches.value_of("mode").unwrap_or("luminance")).unwrap();
 	let mut active      = None;
 	let mut desktop     = 0;
-	let mut changing    = Instant::now() - Duration::from_secs(42);
+	let mut changed     = Instant::now() - Duration::from_secs(42);
 	let mut brightness  = 0.0;
 	let mut screensaver = false;
 
@@ -320,7 +320,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 					}
 
 					interface::Event::Brightness(value) => {
-						changing = Instant::now();
+						changed = Instant::now();
 						cache.set(mode!(mode), value).unwrap();
 					}
 
@@ -342,7 +342,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 						if mode == interface::Mode::Luminance && !screensaver {
 							screen.refresh(rect.x() as u32, rect.y() as u32, rect.width() as u32, rect.height() as u32).unwrap();
 
-							if changing.elapsed().as_secs() >= 1 {
+							if changed.elapsed().as_secs() >= 1 {
 								if let Some(value) = cache.get(cache::Mode::Luminance(screen.luminance())).unwrap() {
 									fade!(value).unwrap()
 								}
