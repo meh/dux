@@ -28,6 +28,10 @@ use xcbu;
 
 use {Display, error};
 
+/// An in memory cache persisted to disk for settings.
+///
+/// It supports multiple profiles and takes care of saving the brightness
+/// values appropriately for each `Mode`.
 pub struct Cache {
 	display: Arc<Display>,
 	data:    JsonValue,
@@ -35,6 +39,7 @@ pub struct Cache {
 	profile: String,
 }
 
+/// Supported modes.
 pub enum Mode {
 	Manual,
 	Desktop(i32),
@@ -44,7 +49,9 @@ pub enum Mode {
 }
 
 impl Cache {
+	/// Open the cache at the given path.
 	pub fn open<T: AsRef<Path>>(display: Arc<Display>, path: Option<T>) -> error::Result<Self> {
+		// If no path was given we use the XDG standard places.
 		let path = if let Some(path) = path {
 			path.as_ref().into()
 		}
@@ -53,6 +60,7 @@ impl Cache {
 				.place_config_file("cache.json").unwrap()
 		};
 
+		// Load the contents if the file exists.
 		let mut data = if path.exists() {
 			let mut file    = File::open(&path)?;
 			let mut content = String::new();
@@ -64,6 +72,7 @@ impl Cache {
 			object!{}
 		};
 
+		// Make sure it's set up with basic keys.
 		if data["default"].is_null() {
 			data["default"] = object!{};
 		}
@@ -76,6 +85,7 @@ impl Cache {
 		})
 	}
 
+	/// Save the cache to disk.
 	pub fn save(&mut self) -> error::Result<()> {
 		let mut file = File::create(&self.path)?;
 		self.data.to_writer(&mut file);
@@ -83,6 +93,7 @@ impl Cache {
 		Ok(())
 	}
 
+	/// Change cache profile.
 	pub fn profile<T: Into<String>>(&mut self, name: T) {
 		self.profile = name.into();
 
@@ -91,10 +102,12 @@ impl Cache {
 		}
 	}
 
+	/// Set the brightness value for the given mode.
 	pub fn set(&mut self, mode: Mode, value: f32) -> error::Result<()> {
 		match mode {
 			Mode::Manual => (),
 
+			// Just store the ID.
 			Mode::Desktop(id) => {
 				if self.data[&self.profile]["desktop"].is_null() {
 					self.data[&self.profile]["desktop"] = object!{};
@@ -103,6 +116,7 @@ impl Cache {
 				self.data[&self.profile]["desktop"][id.to_string()] = value.into();
 			}
 
+			// Store both the WM_CLASS instance and class name.
 			Mode::Window(active) => {
 				if let Some(id) = active {
 					if self.data[&self.profile]["window"].is_null() {
@@ -116,14 +130,19 @@ impl Cache {
 				}
 			}
 
+			// Store the luminance and brightness pairs in a sorted array.
 			Mode::Luminance(luma) => {
 				if self.data[&self.profile]["luminance"].is_null() {
 					self.data[&self.profile]["luminance"] = array!{};
 				}
 
 				if let JsonValue::Array(ref mut array) = self.data[&self.profile]["luminance"] {
+					// The luminance value is rounded and limited to an `u8` so the
+					// actual settable luminance ranges are between 0 and 100 and don't
+					// suffer bloating caused by precision errors.
 					let luma = luma.round() as u8;
 
+					// Just use binary search and insert/replace as told.
 					match array.binary_search_by_key(&luma, |v| v[0].as_u8().unwrap()) {
 						Ok(index) =>
 							array[index] = array![luma, value],
@@ -142,16 +161,24 @@ impl Cache {
 		Ok(())
 	}
 
+	/// Get the brightness value for the given mode.
 	pub fn get(&mut self, mode: Mode) -> error::Result<Option<f32>> {
 		match mode {
 			Mode::Manual => (),
 
+			// Desktop just checks the desktop ID.
 			Mode::Desktop(id) => {
 				if let Some(value) = self.data[&self.profile]["desktop"][id.to_string()].as_f32() {
 					return Ok(Some(value))
 				}
 			}
 
+			// Window checking first checks if the WM_CLASS instance name matches,
+			// otherwise it uses the WM_CLASS class name.
+			//
+			// This allows specialization for a differently named window belonging to
+			// the same class. (i.e. terminals using the same program but having
+			// different settings)
 			Mode::Window(active) => {
 				if let Some(id) = active {
 					let name = xcbu::icccm::get_wm_class(&self.display, id).get_reply()?;
@@ -166,54 +193,74 @@ impl Cache {
 				}
 			}
 
+			// Fetching the brightness corresponding to the luminance is a little
+			// convulted, but alas.
 			Mode::Luminance(luma) => {
 				if let JsonValue::Array(ref slice) = self.data[&self.profile]["luminance"] {
+					// If the array is empty we can't do nuffin.
+					if slice.is_empty() {
+						return Ok(None);
+					}
+
+					// The luminance value is rounded and limited to an `u8` so the
+					// actual settable luminance ranges are between 0 and 100 and don't
+					// suffer bloating caused by precision errors.
 					let luma = luma.round() as u8;
 
-					if !slice.is_empty() {
-						let index = match slice.binary_search_by_key(&luma, |v| v[0].as_u8().unwrap()) {
-							Ok(index) | Err(index) => index
-						};
+					// Since the luminance values are sorted we can do a binary search to
+					// fetch the surrounding values.
+					let index = match slice.binary_search_by_key(&luma, |v| v[0].as_u8().unwrap()) {
+						Ok(index) | Err(index) => index
+					};
 
-						let before = slice.get(index.overflowing_sub(1).0).map(|v| (v[0].as_u8().unwrap(), v[1].as_f32().unwrap()));
-						let after  = slice.get(index).map(|v| (v[0].as_u8().unwrap(), v[1].as_f32().unwrap()));
+					let before = slice.get(index.overflowing_sub(1).0).map(|v| (v[0].as_u8().unwrap(), v[1].as_f32().unwrap()));
+					let after  = slice.get(index).map(|v| (v[0].as_u8().unwrap(), v[1].as_f32().unwrap()));
 
-						match (before, after) {
-							(None, None) => (),
+					match (before, after) {
+						// This is not possible, it would mean the array was empty.
+						(None, None) =>
+							unreachable!(),
 
-							(Some((_, value)), None) | (None, Some((_, value))) => {
-								return Ok(Some(value));
-							}
+						// Just return the one value.
+						(Some((_, value)), None) | (None, Some((_, value))) => {
+							return Ok(Some(value));
+						}
 
-							(Some((a1, a2)), Some((c1, c2))) => {
-								let a1 = a1 as f32;
-								let b1 = luma as f32;
-								let c1 = c1 as f32;
+						// Calculate an interpolated brightness based on the distance
+						// from the smaller and bigger luminance setting.
+						//
+						// My math-fu is weak so it just calculates the percent value on
+						// the luminance range, and then applies it to the brightness
+						// range, inverting the percentage if the brightness is inverted.
+						(Some((a1, a2)), Some((c1, c2))) => {
+							let a1 = a1 as f32;
+							let b1 = luma as f32;
+							let c1 = c1 as f32;
 
-								let p = {
-									let x = b1 - a1;
-									let y = c1 - a1;
+							let p = {
+								let x = b1 - a1;
+								let y = c1 - a1;
 
-									if a2 < c2 {
-										(x * 100.0) / y
-									}
-									else {
-										100.0 - ((x * 100.0) / y)
-									}
-								};
+								if a2 < c2 {
+									(x * 100.0) / y
+								}
+								else {
+									100.0 - ((x * 100.0) / y)
+								}
+							};
 
-								return Ok(Some({
-									let x = f32::min(a2, c2);
-									let y = f32::max(a2, c2);
+							return Ok(Some({
+								let x = f32::min(a2, c2);
+								let y = f32::max(a2, c2);
 
-									x + ((p * (y - x)) / 100.0)
-								}));
-							}
-						};
+								x + ((p * (y - x)) / 100.0)
+							}));
+						}
 					}
 				}
 			}
 
+			// This is me being lazy.
 			Mode::Time(time) => {
 				// TODO: it
 			}
