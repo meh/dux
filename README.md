@@ -1,6 +1,6 @@
 DUX
 ===
-An x11 backlight manager.
+An X11 backlight manager.
 
 Installation
 ------------
