@@ -23,6 +23,7 @@ use dbus;
 
 use {error, backlight};
 
+/// DBus interface handler.
 pub struct Interface {
 	receiver: Receiver<Event>,
 }
@@ -67,6 +68,7 @@ impl Mode {
 }
 
 impl Interface {
+	/// Change the adaptive mode.
 	pub fn mode<T: Into<String>>(value: T) -> error::Result<()> {
 		dbus::Connection::get_private(dbus::BusType::Session)?
 			.send(dbus::Message::new_method_call(
@@ -79,6 +81,7 @@ impl Interface {
 		Ok(())
 	}
 
+	/// Change the current profile.
 	pub fn profile<T: Into<String>>(value: T) -> error::Result<()> {
 		dbus::Connection::get_private(dbus::BusType::Session)?
 			.send(dbus::Message::new_method_call(
@@ -91,6 +94,7 @@ impl Interface {
 		Ok(())
 	}
 
+	/// Send a brightness change.
 	pub fn brightness(value: f32) -> error::Result<()> {
 		dbus::Connection::get_private(dbus::BusType::Session)?
 			.send(dbus::Message::new_method_call(
@@ -103,6 +107,7 @@ impl Interface {
 		Ok(())
 	}
 
+	/// Send a save event.
 	pub fn save() -> error::Result<()> {
 		dbus::Connection::get_private(dbus::BusType::Session)?
 			.send(dbus::Message::new_method_call(
@@ -114,6 +119,7 @@ impl Interface {
 		Ok(())
 	}
 
+	/// Send a stop event.
 	pub fn stop() -> error::Result<()> {
 		dbus::Connection::get_private(dbus::BusType::Session)?
 			.send(dbus::Message::new_method_call(
@@ -125,6 +131,7 @@ impl Interface {
 		Ok(())
 	}
 
+	/// Spawn the server.
 	pub fn spawn() -> error::Result<Self> {
 		let (sender, receiver)     = sync_channel(1);
 		let (g_sender, g_receiver) = channel::<error::Result<()>>();
