@@ -23,6 +23,12 @@ To start the adaptive brightness daemon just run:
 dux adaptive &
 ```
 
+To stop it gracefully (making sure the settings are saved) just run:
+
+```
+dux stop
+```
+
 Adaptive brightness
 ===================
 Adaptive brightness manages the backlight automatically for you based on the
