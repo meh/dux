@@ -31,6 +31,11 @@ selected mode and profile.
 To select a mode you can either pass a `--mode <mode>` when starting the
 adaptive brightness, or call `dux mode <mode>` after it's been started.
 
+There's support for multiple profiles, to select a profile just pass `--profile
+<name>` when starting the adaptive brightness, or call `dux profile <name>`;
+profiles are useful for example to have different settings during the night and
+during the day, or when you're inside or outside.
+
 To configure the brightness levels for the various modes all you have to do is
 change the backlight from dux itself like you would with `xbacklight` and the
 change will be saved. If you don't want to do that you can call `dux sync`
