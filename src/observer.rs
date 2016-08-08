@@ -56,7 +56,7 @@ impl Observer {
 	}
 
 	pub fn spawn(display: Arc<Display>) -> error::Result<Self> {
-		let (sender, receiver) = sync_channel(8);
+		let (sender, receiver) = sync_channel(1);
 
 		// Listen for map/unmap and configure events.
 		xcb::change_window_attributes_checked(&display, display.root, &[
@@ -64,21 +64,23 @@ impl Observer {
 				xcb::EVENT_MASK_SUBSTRUCTURE_NOTIFY |
 				xcb::EVENT_MASK_PROPERTY_CHANGE)]).request_check()?;
 
+		// Listen for damage areas, if the other report levels worked it would be
+		// nice, but alas, we're gonna get spammed by damages.
 		let damage = display.generate_id();
 		xcb::damage::create_checked(&display, damage, display.root, xcb::damage::REPORT_LEVEL_RAW_RECTANGLES as u8)
 			.request_check()?;
 
-		// Send the currently active desktop if present.
-		if let Ok(id) = Observer::desktop(&display) {
-			sender.send(Event::Desktop(id)).unwrap();
-		}
-
-		// Send the currently active window if present.
-		if let Ok(id) = Observer::window(&display) {
-			sender.send(Event::Active(id)).unwrap();
-		}
-
 		thread::spawn(move || {
+			// Send the currently active desktop if present.
+			if let Ok(id) = Observer::desktop(&display) {
+				sender.send(Event::Desktop(id)).unwrap();
+			}
+
+			// Send the currently active window if present.
+			if let Ok(id) = Observer::window(&display) {
+				sender.send(Event::Active(id)).unwrap();
+			}
+
 			while let Some(event) = display.wait_for_event() {
 				match event.response_type() {
 					xcb::MAP_NOTIFY => {
@@ -121,10 +123,11 @@ impl Observer {
 
 					e if e == display.damage.first_event() => {
 						let event = xcb::cast_event(&event): &xcb::damage::NotifyEvent;
+						sender.send(Event::Damage(event.area())).unwrap();
+
+						// Mark the damage region as handled.
 						xcb::damage::subtract(&display, damage, xcb::xfixes::REGION_NONE, xcb::xfixes::REGION_NONE);
 						display.flush();
-
-						sender.send(Event::Damage(event.area())).unwrap();
 					}
 
 					_ => ()
