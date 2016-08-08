@@ -226,35 +226,14 @@ impl Cache {
 							return Ok(Some(value));
 						}
 
-						// Calculate an interpolated brightness based on the distance
-						// from the smaller and bigger luminance setting.
-						//
-						// My math-fu is weak so it just calculates the percent value on
-						// the luminance range, and then applies it to the brightness
-						// range, inverting the percentage if the brightness is inverted.
-						(Some((a1, a2)), Some((c1, c2))) => {
-							let a1 = a1 as f32;
-							let b1 = luma as f32;
-							let c1 = c1 as f32;
+						// User linear interpolation to get the proper brightness for the
+						// luminance.
+						(Some((g1, d1)), Some((g2, d2))) => {
+							let g  = luma as f32;
+							let g1 = g1 as f32;
+							let g2 = g2 as f32;
 
-							let p = {
-								let x = b1 - a1;
-								let y = c1 - a1;
-
-								if a2 < c2 {
-									(x * 100.0) / y
-								}
-								else {
-									100.0 - ((x * 100.0) / y)
-								}
-							};
-
-							return Ok(Some({
-								let x = f32::min(a2, c2);
-								let y = f32::max(a2, c2);
-
-								x + ((p * (y - x)) / 100.0)
-							}));
+							return Ok(Some(d1 + ((g - g1) / (g2 - g1)) * (d2 - d1)));
 						}
 					}
 				}
