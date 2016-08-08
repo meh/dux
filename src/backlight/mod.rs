@@ -49,7 +49,7 @@ pub fn open(display: Arc<Display>) -> error::Result<Box<Backlight>> {
 }
 
 /// Clamps the given value between `0.0` and `100.0`.
-pub fn normalize(value: f32) -> f32 {
+pub fn clamp(value: f32) -> f32 {
 	if value > 100.0 {
 		100.0
 	}
@@ -67,12 +67,12 @@ pub mod fade {
 	use std::thread;
 	use std::time::Duration;
 	use std::f32;
-	use super::{Backlight, normalize};
+	use super::{Backlight, clamp};
 	use error;
 
 	/// It takes `time` milliseconds, split into `steps` increments/decrements.
 	pub fn by_time(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) -> error::Result<()> {
-		let value = normalize(value);
+		let value = clamp(value);
 
 		if steps != 0 && time != 0 {
 			let mut current = backlight.get()?;

@@ -102,7 +102,7 @@ impl Interface {
 				"/meh/rust/Backlight",
 				"meh.rust.Backlight",
 				"Brightness")?
-					.append1(backlight::normalize(value) as f64))?;
+					.append1(backlight::clamp(value) as f64))?;
 
 		Ok(())
 	}

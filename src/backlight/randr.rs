@@ -88,7 +88,7 @@ impl super::Backlight for Backlight {
 
 	fn set(&mut self, value: f32) -> error::Result<()> {
 		xcb::randr::change_output_property(&self.display, self.output, self.atom, xcb::ATOM_INTEGER, 32, xcb::PROP_MODE_REPLACE as u8,
-			&[(self.range.0 + (super::normalize(value) * (self.range.1 - self.range.0) as f32 / 100.0) as i32)]);
+			&[(self.range.0 + (super::clamp(value) * (self.range.1 - self.range.0) as f32 / 100.0) as i32)]);
 
 		self.display.flush();
 

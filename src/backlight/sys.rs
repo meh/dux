@@ -60,7 +60,7 @@ impl super::Backlight for Backlight {
 
 	fn set(&mut self, value: f32) -> error::Result<()> {
 		let mut file = File::create(&self.path)?;
-		write!(&mut file, "{}", ((super::normalize(value) * self.max as f32) / 100.0).round() as u32)?;
+		write!(&mut file, "{}", ((super::clamp(value) * self.max as f32) / 100.0).round() as u32)?;
 
 		Ok(())
 	}
