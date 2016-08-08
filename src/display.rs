@@ -22,6 +22,7 @@ use xcbu;
 
 use error;
 
+/// Handles the X11 display.
 pub struct Display {
 	connection: xcbu::ewmh::Connection,
 	screen:     i32,
@@ -36,6 +37,7 @@ unsafe impl Send for Display { }
 unsafe impl Sync for Display { }
 
 impl Display {
+	/// Open the default display.
 	pub fn open() -> error::Result<Self> {
 		let (connection, screen) = xcb::Connection::connect(None)?;
 		let connection           = xcbu::ewmh::Connection::connect(connection).map_err(|(e, _)| e)?;
@@ -91,30 +93,37 @@ impl Display {
 		})
 	}
 
+	/// Get the default screen.
 	pub fn screen(&self) -> i32 {
 		self.screen
 	}
 
+	/// Get the root window for the default screen.
 	pub fn root(&self) -> xcb::Window {
 		self.root
 	}
 
+	/// Get the default screen width.
 	pub fn width(&self) -> u32 {
 		self.get_setup().roots().nth(self.screen as usize).unwrap().width_in_pixels() as u32
 	}
 
+	/// Get the default screen height.
 	pub fn height(&self) -> u32 {
 		self.get_setup().roots().nth(self.screen as usize).unwrap().height_in_pixels() as u32
 	}
 
+	/// Get the XRandr extension details.
 	pub fn randr(&self) -> &xcb::QueryExtensionData {
 		&self.randr
 	}
 
+	/// Get the MIT-SHM extension details.
 	pub fn shm(&self) -> &xcb::QueryExtensionData {
 		&self.shm
 	}
 
+	/// Get the DAMAGE extension details.
 	pub fn damage(&self) -> &xcb::QueryExtensionData {
 		&self.damage
 	}
