@@ -21,6 +21,7 @@ use xcbu;
 
 use {Display, error};
 
+/// Manages luminances and screen content through the MIT-SHM extension.
 pub struct Screen {
 	display: Arc<Display>,
 
@@ -32,8 +33,12 @@ pub struct Screen {
 const PRECISION: f32 = 1_000_000.0;
 
 impl Screen {
+	/// Create a new screen holder.
 	pub fn open(display: Arc<Display>) -> error::Result<Screen> {
-		let image      = xcbu::image::shm::create(&display, 24, display.width as u16, display.height as u16)?;
+		// Create an image in shared memory as big as the display.
+		let image = xcbu::image::shm::create(&display, 24, display.width as u16, display.height as u16)?;
+
+		// Set up the luminances vector, again as big as the display.
 		let luminances = vec![0.0; (display.width * display.height) as usize];
 
 		Ok(Screen {
@@ -44,10 +49,14 @@ impl Screen {
 		})
 	}
 
+	/// Get the given screen section and update the luminance values.
 	pub fn refresh(&mut self, x: u32, y: u32, width: u32, height: u32) -> error::Result<()> {
+		// Note that this will resize the image to fit the section, but that
+		// doesn't matter because it will never be bigger than the screen.
 		xcbu::image::shm::area(&self.display.clone(), self.display.root, &mut self.image,
 			x as i16, y as i16, width as u16, height as u16, !0)?;
 
+		// Update the pixel values relative to the section.
 		for xx in x .. width {
 			for yy in y .. height {
 				let px = self.image.get(xx - x, yy - y);
@@ -58,8 +67,9 @@ impl Screen {
 		Ok(())
 	}
 
+	/// Puts a pixel at the given coordinates, updating the total luminance.
 	pub fn put(&mut self, x: u32, y: u32, pixel: u32) -> f32 {
-		let i = (y * self.display.width + x) as usize;
+		// Extract the RGB channels and normalize them to `0.0` - `1.0`.
 		let r = ((pixel & 0xff0000) >> 16) as f32 / 255.0;
 		let g = ((pixel & 0x00ff00) >> 8) as f32 / 255.0;
 		let b = (pixel & 0x0000ff) as f32 / 255.0;
@@ -72,14 +82,27 @@ impl Screen {
 		let l = if l > 0.008856 { l.powf(1.0 / 3.0) } else { (l * 7.787) + (16.0 / 116.0) };
 		let l = (l * 116.0) - 16.0;
 
+		// The index within the luminance vector based on the position.
+		let i = (y * self.display.width + x) as usize;
+
+		// Update the total luminance in place, we use an `u64` to contain the
+		// total to avoid incremental precision errors because of the repeated
+		// operations.
+		//
+		// The actual value is clamped to a constant precision and converted to an
+		// `u64` value.
 		self.luminance -= (self.luminances[i].powi(2) * PRECISION) as u64;
 		self.luminance += (l.powi(2) * PRECISION) as u64;
+
+		// Save the new luminance so it can be restored when this pixel is changed.
 		self.luminances[i] = l;
 
 		l
 	}
 
+	/// Get the square root of the total luminance.
 	pub fn luminance(&self) -> f32 {
-		((self.luminance as f32 / PRECISION) / (self.display.width * self.display.height) as f32).sqrt()
+		((self.luminance as f32 / PRECISION)
+			/ (self.display.width * self.display.height) as f32).sqrt()
 	}
 }
