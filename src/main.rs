@@ -243,11 +243,12 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 		cache.profile(profile);
 	}
 
-	let mut mode       = interface::Mode::parse(matches.value_of("mode").unwrap_or("luminance")).unwrap();
-	let mut active     = None;
-	let mut desktop    = 0;
-	let mut changing   = Instant::now() - Duration::from_secs(42);
-	let mut brightness = 0.0;
+	let mut mode        = interface::Mode::parse(matches.value_of("mode").unwrap_or("luminance")).unwrap();
+	let mut active      = None;
+	let mut desktop     = 0;
+	let mut changing    = Instant::now() - Duration::from_secs(42);
+	let mut brightness  = 0.0;
+	let mut screensaver = false;
 
 	macro_rules! mode {
 		($value:expr) =>(
@@ -321,6 +322,10 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 					interface::Event::Stop => {
 						break;
 					}
+
+					interface::Event::ScreenSaver(active) => {
+						screensaver = active;
+					}
 				}
 			},
 
@@ -329,7 +334,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 					observer::Event::Show(_) | observer::Event::Hide(_) | observer::Event::Change(_) => (),
 
 					observer::Event::Damage(rect) => {
-						if mode == interface::Mode::Luminance {
+						if mode == interface::Mode::Luminance && !screensaver {
 							screen.refresh(rect.x() as u32, rect.y() as u32, rect.width() as u32, rect.height() as u32).unwrap();
 
 							if changing.elapsed().as_secs() >= 1 {

@@ -34,6 +34,8 @@ pub enum Event {
 	Brightness(f32),
 	Save,
 	Stop,
+
+	ScreenSaver(bool),
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
@@ -159,6 +161,17 @@ impl Interface {
 				}
 			);
 
+			(watch $conn:expr, $filter:expr) => (
+				match $conn.add_match($filter) {
+					Err(error) => {
+						g_sender.send(Err(error.into())).unwrap();
+						return;
+					}
+
+					Ok(_) => ()
+				}
+			);
+
 			(ready) => (
 				g_sender.send(Ok(())).unwrap();
 			);
@@ -173,6 +186,7 @@ impl Interface {
 			let f = dbus::tree::Factory::new_fn();
 
 			dbus!(register c, "meh.rust.Backlight");
+			dbus!(watch c, "interface='org.gnome.ScreenSaver',member='ActiveChanged'");
 			dbus!(ready);
 
 			let tree = f.tree().add(f.object_path("/meh/rust/Backlight").introspectable().add(f.interface("meh.rust.Backlight")
@@ -222,7 +236,19 @@ impl Interface {
 				}))));
 
 			tree.set_registered(&c, true).unwrap();
-			for _ in tree.run(&c, c.iter(1_000_000)) { }
+			for item in tree.run(&c, c.iter(1_000_000)) {
+				if let dbus::ConnectionItem::Signal(m) = item {
+					match (&*m.interface().unwrap(), &*m.member().unwrap()) {
+						("org.gnome.ScreenSaver", "ActiveChanged") => {
+							if let Some(status) = m.get1() {
+								sender.send(Event::ScreenSaver(status)).unwrap();
+							}
+						}
+
+						_ => ()
+					}
+				}
+			}
 		});
 
 		dbus!(check)?;
