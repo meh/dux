@@ -62,8 +62,8 @@ pub use cache::Cache;
 fn main() {
 	env_logger::init().unwrap();
 
-	let display   = Arc::new(Display::open().expect("no display found"));
-	let backlight = backlight::open(display.clone()).expect("no backlight support");
+	let     display   = Arc::new(Display::open().expect("no display found"));
+	let mut backlight = backlight::open(display.clone()).expect("no backlight support");
 
 	let mut app = App::new("dux")
 		.version(env!("CARGO_PKG_VERSION"))
@@ -157,6 +157,8 @@ fn main() {
 				.required(true)
 				.index(1)
 				.help("The profile name.")))
+		.subcommand(SubCommand::with_name("sync")
+			.about("Synchronize any backlight changes with the adaptive daemon."))
 		.subcommand(SubCommand::with_name("save")
 			.about("Force flush the cache to disk."))
 		.subcommand(SubCommand::with_name("stop")
@@ -184,6 +186,9 @@ fn main() {
 
 		("profile", Some(submatches)) =>
 			Interface::profile(submatches.value_of("PROFILE").unwrap()).unwrap(),
+
+		("sync", Some(_)) =>
+			Interface::brightness(backlight.get().unwrap()).unwrap(),
 
 		("save", Some(_)) =>
 			Interface::save().unwrap(),
