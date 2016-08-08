@@ -27,6 +27,7 @@ pub trait Backlight {
 mod randr;
 mod sys;
 
+/// Open the first available backlight handler.
 pub fn open(display: Arc<Display>) -> error::Result<Box<Backlight>> {
 	if let Ok(backlight) = randr::Backlight::open(display.clone()) {
 		Ok(Box::new(backlight))
@@ -39,6 +40,7 @@ pub fn open(display: Arc<Display>) -> error::Result<Box<Backlight>> {
 	}
 }
 
+/// Clamps the given value between `0.0` and `100.0`.
 pub fn normalize(value: f32) -> f32 {
 	if value > 100.0 {
 		100.0
@@ -51,6 +53,8 @@ pub fn normalize(value: f32) -> f32 {
 	}
 }
 
+
+/// Fades the backlight from the current value to the given value.
 pub mod fade {
 	use std::thread;
 	use std::time::Duration;
@@ -58,6 +62,7 @@ pub mod fade {
 	use super::{Backlight, normalize};
 	use error;
 
+	/// It takes `time` milliseconds, split into `steps` increments/decrements.
 	pub fn by_time(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) -> error::Result<()> {
 		let value = normalize(value);
 
@@ -76,6 +81,7 @@ pub mod fade {
 		backlight.set(value)
 	}
 
+	/// Waits `time` milliseconds between each `value` increment/decrement.
 	pub fn by_step(backlight: &mut Box<Backlight>, value: f32, step: f32, time: u64) -> error::Result<()> {
 		if time != 0 {
 			let mut current = backlight.get()?;
