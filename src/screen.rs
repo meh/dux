@@ -105,10 +105,12 @@ impl Screen {
 		let g = ((pixel & 0x00ff00) >> 8) as f32 / 255.0;
 		let b = (pixel & 0x0000ff) as f32 / 255.0;
 
+		// Do some more normalization.
 		let r = if r > 0.4045 { ((r + 0.055) / 1.055).powf(2.4) } else { r / 12.92 };
 		let g = if g > 0.4045 { ((g + 0.055) / 1.055).powf(2.4) } else { g / 12.92 };
 		let b = if b > 0.4045 { ((b + 0.055) / 1.055).powf(2.4) } else { b / 12.92 };
 
+		// Calculate the LUMA and normalize it.
 		let l = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 1.0;
 		let l = if l > 0.008856 { l.powf(1.0 / 3.0) } else { (l * 7.787) + (16.0 / 116.0) };
 		let l = (l * 116.0) - 16.0;
@@ -131,7 +133,7 @@ impl Screen {
 		l
 	}
 
-	/// Get the square root of the total luminance.
+	/// Get the root mean square of the total luminance.
 	pub fn luminance(&self) -> f32 {
 		((self.luminance as f32 / PRECISION)
 			/ (self.width * self.height) as f32).sqrt()
