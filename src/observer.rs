@@ -35,16 +35,17 @@ pub enum Event {
 	Damage(xcb::Rectangle),
 	Active(Option<xcb::Window>),
 	Desktop(i32),
+	Resize(u32, u32),
 }
 
 impl Observer {
 	pub fn desktop(display: &Display) -> error::Result<i32> {
-		xcb::get_property(&display, false, display.root, display.CURRENT_DESKTOP(), xcb::ATOM_CARDINAL, 0, 1)
+		xcb::get_property(&display, false, display.root(), display.CURRENT_DESKTOP(), xcb::ATOM_CARDINAL, 0, 1)
 			.get_reply()?.value::<i32>().get(0).map(|&v| v).ok_or(error::Error::Unsupported)
 	}
 
 	pub fn window(display: &Display) -> error::Result<Option<xcb::Window>> {
-		let id = xcb::get_property(&display, false, display.root, display.ACTIVE_WINDOW(), xcb::ATOM_WINDOW, 0, 1)
+		let id = xcb::get_property(&display, false, display.root(), display.ACTIVE_WINDOW(), xcb::ATOM_WINDOW, 0, 1)
 			.get_reply()?.value::<xcb::Window>().get(0).map(|&v| v).ok_or(error::Error::Unsupported)?;
 
 		if id == 0 {
@@ -59,7 +60,7 @@ impl Observer {
 		let (sender, receiver) = sync_channel(1);
 
 		// Listen for map/unmap and configure events.
-		xcb::change_window_attributes_checked(&display, display.root, &[
+		xcb::change_window_attributes_checked(&display, display.root(), &[
 			(xcb::CW_EVENT_MASK,
 				xcb::EVENT_MASK_SUBSTRUCTURE_NOTIFY |
 				xcb::EVENT_MASK_PROPERTY_CHANGE)]).request_check()?;
@@ -67,7 +68,7 @@ impl Observer {
 		// Listen for damage areas, if the other report levels worked it would be
 		// nice, but alas, we're gonna get spammed by damages.
 		let damage = display.generate_id();
-		xcb::damage::create_checked(&display, damage, display.root, xcb::damage::REPORT_LEVEL_RAW_RECTANGLES as u8)
+		xcb::damage::create_checked(&display, damage, display.root(), xcb::damage::REPORT_LEVEL_RAW_RECTANGLES as u8)
 			.request_check()?;
 
 		thread::spawn(move || {
@@ -121,13 +122,21 @@ impl Observer {
 						}
 					}
 
-					e if e == display.damage.first_event() => {
+					e if e == display.damage().first_event() => {
 						let event = xcb::cast_event(&event): &xcb::damage::NotifyEvent;
 						sender.send(Event::Damage(event.area())).unwrap();
 
 						// Mark the damage region as handled.
 						xcb::damage::subtract(&display, damage, xcb::xfixes::REGION_NONE, xcb::xfixes::REGION_NONE);
 						display.flush();
+					}
+
+					e if e == display.randr().first_event() + xcb::randr::SCREEN_CHANGE_NOTIFY => {
+						let event = xcb::cast_event(&event): &xcb::randr::ScreenChangeNotifyEvent;
+
+						if event.root() == display.root() {
+							sender.send(Event::Resize(event.width() as u32, event.height() as u32)).unwrap();
+						}
 					}
 
 					_ => ()

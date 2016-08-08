@@ -242,7 +242,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 	let     observer  = Observer::spawn(display.clone()).unwrap();
 	let     timer     = Timer::spawn().unwrap();
 	let mut cache     = Cache::open(display.clone(), matches.value_of("cache")).unwrap();
-	let mut screen    = Screen::open(display.clone()).unwrap();
+	let mut screen    = Screen::open(display.clone(), display.width(), display.height()).unwrap();
 
 	if let Some(profile) = matches.value_of("profile") {
 		cache.profile(profile);
@@ -338,14 +338,12 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 				match event.unwrap() {
 					observer::Event::Show(_) | observer::Event::Hide(_) | observer::Event::Change(_) => (),
 
-					observer::Event::Damage(rect) => {
-						if mode == interface::Mode::Luminance && !screensaver {
-							screen.refresh(rect.x() as u32, rect.y() as u32, rect.width() as u32, rect.height() as u32).unwrap();
+					observer::Event::Desktop(id) => {
+						desktop = id;
 
-							if changed.elapsed().as_secs() >= 1 {
-								if let Some(value) = cache.get(cache::Mode::Luminance(screen.luminance())).unwrap() {
-									fade!(value).unwrap()
-								}
+						if mode == interface::Mode::Desktop {
+							if let Some(value) = cache.get(cache::Mode::Desktop(desktop)).unwrap() {
+								fade!(value).unwrap();
 							}
 						}
 					}
@@ -360,14 +358,20 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 						}
 					}
 
-					observer::Event::Desktop(id) => {
-						desktop = id;
+					observer::Event::Damage(rect) => {
+						if mode == interface::Mode::Luminance && !screensaver {
+							screen.refresh(rect.x() as u32, rect.y() as u32, rect.width() as u32, rect.height() as u32).unwrap();
 
-						if mode == interface::Mode::Desktop {
-							if let Some(value) = cache.get(cache::Mode::Desktop(desktop)).unwrap() {
-								fade!(value).unwrap();
+							if changed.elapsed().as_secs() >= 1 {
+								if let Some(value) = cache.get(cache::Mode::Luminance(screen.luminance())).unwrap() {
+									fade!(value).unwrap()
+								}
 							}
 						}
+					}
+
+					observer::Event::Resize(width, height) => {
+						screen.resize(width, height).unwrap();
 					}
 				}
 			}

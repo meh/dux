@@ -31,20 +31,20 @@ pub struct Backlight {
 
 impl Backlight {
 	pub fn open(display: Arc<Display>) -> error::Result<Self> {
-		fn find(c: &Display) -> error::Result<(xcb::randr::Output, xcb::Atom)> {
-			let current = xcb::intern_atom(c, true, "Backlight").get_reply().ok()
+		fn find(display: &Display) -> error::Result<(xcb::randr::Output, xcb::Atom)> {
+			let current = xcb::intern_atom(display, true, "Backlight").get_reply().ok()
 				.and_then(|r| if r.atom() != xcb::ATOM_NONE { Some(r.atom()) } else { None })
 				.ok_or(error::Error::Unsupported)?;
 
-			let legacy = xcb::intern_atom(c, true, "BACKLIGHT").get_reply().ok()
+			let legacy = xcb::intern_atom(display, true, "BACKLIGHT").get_reply().ok()
 				.and_then(|r| if r.atom() != xcb::ATOM_NONE { Some(r.atom()) } else { None })
 				.ok_or(error::Error::Unsupported)?;
 
-			for &id in xcb::randr::get_screen_resources_current(c, c.root).get_reply()?.outputs() {
-				let reply = if let Ok(r) = xcb::randr::get_output_property(c, id, current, xcb::ATOM_NONE, 0, 4, false, false).get_reply() {
+			for &id in xcb::randr::get_screen_resources_current(display, display.root()).get_reply()?.outputs() {
+				let reply = if let Ok(r) = xcb::randr::get_output_property(display, id, current, xcb::ATOM_NONE, 0, 4, false, false).get_reply() {
 					Some((r, current))
 				}
-				else if let Ok(r) = xcb::randr::get_output_property(c, id, legacy, xcb::ATOM_NONE, 0, 4, false, false).get_reply() {
+				else if let Ok(r) = xcb::randr::get_output_property(display, id, legacy, xcb::ATOM_NONE, 0, 4, false, false).get_reply() {
 					Some((r, legacy))
 				}
 				else {

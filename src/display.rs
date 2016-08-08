@@ -23,16 +23,13 @@ use xcbu;
 use error;
 
 pub struct Display {
-	pub connection: xcbu::ewmh::Connection,
-	pub screen:     i32,
-	pub root:       xcb::Window,
+	connection: xcbu::ewmh::Connection,
+	screen:     i32,
+	root:       xcb::Window,
 
-	pub width:  u32,
-	pub height: u32,
-
-	pub randr:  xcb::QueryExtensionData,
-	pub shm:    xcb::QueryExtensionData,
-	pub damage: xcb::QueryExtensionData,
+	randr:  xcb::QueryExtensionData,
+	shm:    xcb::QueryExtensionData,
+	damage: xcb::QueryExtensionData,
 }
 
 unsafe impl Send for Display { }
@@ -40,14 +37,11 @@ unsafe impl Sync for Display { }
 
 impl Display {
 	pub fn open() -> error::Result<Self> {
-		let (connection, screen)  = xcb::Connection::connect(None)?;
-		let connection            = xcbu::ewmh::Connection::connect(connection).map_err(|(e, _)| e)?;
-		let (root, width, height) = {
-			let screen = connection.get_setup().roots().nth(screen as usize).unwrap();
+		let (connection, screen) = xcb::Connection::connect(None)?;
+		let connection           = xcbu::ewmh::Connection::connect(connection).map_err(|(e, _)| e)?;
+		let root                 = connection.get_setup().roots().nth(screen as usize).unwrap().root();
 
-			(screen.root(), screen.width_in_pixels(), screen.height_in_pixels())
-		};
-
+		// Randr is used for the backlight and screen configuration changes events.
 		let randr = {
 			let extension = connection.get_extension_data(xcb::randr::id()).ok_or(error::Error::Unsupported)?;
 			let version   = xcb::randr::query_version(&connection, 1, 2).get_reply()?;
@@ -56,9 +50,13 @@ impl Display {
 				return Err(error::Error::Unsupported);
 			}
 
+			xcb::randr::select_input_checked(&connection, root, xcb::randr::NOTIFY_MASK_SCREEN_CHANGE as u16)
+				.request_check()?;
+
 			extension
 		};
 
+		// MIT-SHM is used to fetch screen contents.
 		let shm = {
 			let extension = connection.get_extension_data(xcb::shm::id()).ok_or(error::Error::Unsupported)?;
 			let version   = xcb::shm::query_version(&connection).get_reply()?;
@@ -70,6 +68,7 @@ impl Display {
 			extension
 		};
 
+		// DAMAGE is used to get screen content changes.
 		let damage = {
 			let extension = connection.get_extension_data(xcb::damage::id()).ok_or(error::Error::Unsupported)?;
 			let version   = xcb::damage::query_version(&connection, 1, 1).get_reply()?;
@@ -86,13 +85,38 @@ impl Display {
 			screen:     screen,
 			root:       root,
 
-			width:  width as u32,
-			height: height as u32,
-
 			randr:  randr,
 			shm:    shm,
 			damage: damage,
 		})
+	}
+
+	pub fn screen(&self) -> i32 {
+		self.screen
+	}
+
+	pub fn root(&self) -> xcb::Window {
+		self.root
+	}
+
+	pub fn width(&self) -> u32 {
+		self.get_setup().roots().nth(self.screen as usize).unwrap().width_in_pixels() as u32
+	}
+
+	pub fn height(&self) -> u32 {
+		self.get_setup().roots().nth(self.screen as usize).unwrap().height_in_pixels() as u32
+	}
+
+	pub fn randr(&self) -> &xcb::QueryExtensionData {
+		&self.randr
+	}
+
+	pub fn shm(&self) -> &xcb::QueryExtensionData {
+		&self.shm
+	}
+
+	pub fn damage(&self) -> &xcb::QueryExtensionData {
+		&self.damage
 	}
 }
 

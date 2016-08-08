@@ -24,8 +24,11 @@ use {Display, error};
 /// Manages luminances and screen content through the MIT-SHM extension.
 pub struct Screen {
 	display: Arc<Display>,
+	image:   xcbu::image::shm::Image,
 
-	image:      xcbu::image::shm::Image,
+	width:  u32,
+	height: u32,
+
 	luminances: Vec<f32>,
 	luminance:  u64,
 }
@@ -34,26 +37,54 @@ const PRECISION: f32 = 1_000_000.0;
 
 impl Screen {
 	/// Create a new screen holder.
-	pub fn open(display: Arc<Display>) -> error::Result<Screen> {
+	pub fn open(display: Arc<Display>, width: u32, height: u32) -> error::Result<Screen> {
 		// Create an image in shared memory as big as the display.
-		let image = xcbu::image::shm::create(&display, 24, display.width as u16, display.height as u16)?;
+		let image = xcbu::image::shm::create(&display, 24, width as u16, height as u16)?;
 
 		// Set up the luminances vector, again as big as the display.
-		let luminances = vec![0.0; (display.width * display.height) as usize];
+		let luminances = vec![0.0; (width * height) as usize];
 
 		Ok(Screen {
-			display:    display,
-			image:      image,
+			display: display,
+			image:   image,
+
+			width:  width,
+			height: height,
+
 			luminances: luminances,
 			luminance:  0,
 		})
+	}
+
+	pub fn resize(&mut self, width: u32, height: u32) -> error::Result<()> {
+		// Create a new image only if the new size is bigger than the actual size.
+		if self.image.actual_width() * self.image.actual_height() < (width * height) as u16 {
+			self.image = xcbu::image::shm::create(&self.display, 24, width as u16, height as u16)?;
+		}
+		else {
+			self.image.resize(width as u16, height as u16);
+		}
+
+		self.width  = width;
+		self.height = height;
+
+		// Reset the luminance values.
+		self.luminances.resize((width * height) as usize, 0.0);
+		self.luminance = 0;
+
+		for item in &mut self.luminances {
+			*item = 0.0;
+		}
+
+		// Update the whole screen.
+		self.refresh(0, 0, width, height)
 	}
 
 	/// Get the given screen section and update the luminance values.
 	pub fn refresh(&mut self, x: u32, y: u32, width: u32, height: u32) -> error::Result<()> {
 		// Note that this will resize the image to fit the section, but that
 		// doesn't matter because it will never be bigger than the screen.
-		xcbu::image::shm::area(&self.display.clone(), self.display.root, &mut self.image,
+		xcbu::image::shm::area(&self.display.clone(), self.display.root(), &mut self.image,
 			x as i16, y as i16, width as u16, height as u16, !0)?;
 
 		// Update the pixel values relative to the section.
@@ -83,7 +114,7 @@ impl Screen {
 		let l = (l * 116.0) - 16.0;
 
 		// The index within the luminance vector based on the position.
-		let i = (y * self.display.width + x) as usize;
+		let i = (y * self.width + x) as usize;
 
 		// Update the total luminance in place, we use an `u64` to contain the
 		// total to avoid incremental precision errors because of the repeated
@@ -103,6 +134,6 @@ impl Screen {
 	/// Get the square root of the total luminance.
 	pub fn luminance(&self) -> f32 {
 		((self.luminance as f32 / PRECISION)
-			/ (self.display.width * self.display.height) as f32).sqrt()
+			/ (self.width * self.height) as f32).sqrt()
 	}
 }
