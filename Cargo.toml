@@ -9,9 +9,6 @@ description = "X11 backlight manager."
 repository  = "https://github.com/meh/screenruster"
 keywords    = ["x11", "graphics"]
 
-[profile.release]
-debug = true
-
 [dependencies]
 log        = "0.3"
 env_logger = "0.3"
