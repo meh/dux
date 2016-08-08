@@ -24,26 +24,43 @@ use xcb;
 
 use {Display, error};
 
+/// Handles events from a `Display` and sends the appropriate ones.
 pub struct Observer {
 	receiver: Receiver<Event>,
 }
 
+/// Events from the `Display`.
 pub enum Event {
+	/// A window is being shown.
 	Show(xcb::Window),
+
+	/// A window is being hidden.
 	Hide(xcb::Window),
+
+	/// A window's position/size has changed.
 	Change(xcb::Window),
+
+	/// Some screen area changed.
 	Damage(xcb::Rectangle),
+
+	/// The active window changed.
 	Active(Option<xcb::Window>),
+
+	/// The current desktop changed.
 	Desktop(i32),
+
+	/// The screen has been resized/rotated.
 	Resize(u32, u32),
 }
 
 impl Observer {
+	/// Get the current desktop.
 	pub fn desktop(display: &Display) -> error::Result<i32> {
 		xcb::get_property(&display, false, display.root(), display.CURRENT_DESKTOP(), xcb::ATOM_CARDINAL, 0, 1)
 			.get_reply()?.value::<i32>().get(0).map(|&v| v).ok_or(error::Error::Unsupported)
 	}
 
+	/// Get the currently active window, if any.
 	pub fn window(display: &Display) -> error::Result<Option<xcb::Window>> {
 		let id = xcb::get_property(&display, false, display.root(), display.ACTIVE_WINDOW(), xcb::ATOM_WINDOW, 0, 1)
 			.get_reply()?.value::<xcb::Window>().get(0).map(|&v| v).ok_or(error::Error::Unsupported)?;
@@ -56,6 +73,7 @@ impl Observer {
 		}
 	}
 
+	/// Spawn the observer on the given `Display`.
 	pub fn spawn(display: Arc<Display>) -> error::Result<Self> {
 		let (sender, receiver) = sync_channel(1);
 
@@ -122,6 +140,7 @@ impl Observer {
 						}
 					}
 
+					// Handle damaged rectangles.
 					e if e == display.damage().first_event() => {
 						let event = xcb::cast_event(&event): &xcb::damage::NotifyEvent;
 						sender.send(Event::Damage(event.area())).unwrap();
@@ -131,6 +150,7 @@ impl Observer {
 						display.flush();
 					}
 
+					// Handle screen changes.
 					e if e == display.randr().first_event() + xcb::randr::SCREEN_CHANGE_NOTIFY => {
 						let event = xcb::cast_event(&event): &xcb::randr::ScreenChangeNotifyEvent;
 
