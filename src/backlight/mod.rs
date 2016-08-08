@@ -20,7 +20,15 @@ use std::sync::Arc;
 use {Display, error};
 
 pub trait Backlight {
+	/// The raw backlight range.
+	fn range(&self) -> (u32, u32) {
+		(0, 100)
+	}
+
+	/// Get the current backlight value as a precentage.
 	fn get(&mut self) -> error::Result<f32>;
+
+	/// Set the backlight value as a percentage.
 	fn set(&mut self, value: f32) -> error::Result<()>;
 }
 

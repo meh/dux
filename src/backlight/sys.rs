@@ -32,8 +32,8 @@ impl Backlight {
 		let max  = {
 			let mut file    = File::open(root.join("max_brightness"))?;
 			let mut content = String::new();
-
 			file.read_to_string(&mut content)?;
+
 			content.trim().parse::<u32>().or(Err(error::Error::Unsupported))?
 		};
 
@@ -45,18 +45,22 @@ impl Backlight {
 }
 
 impl super::Backlight for Backlight {
+	fn range(&self) -> (u32, u32) {
+		(0, self.max)
+	}
+
 	fn get(&mut self) -> error::Result<f32> {
 		let mut file    = File::open(&self.path)?;
 		let mut content = String::new();
-
 		file.read_to_string(&mut content)?;
+
 		Ok(content.trim().parse::<f32>().or(Err(error::Error::Unsupported))?
 			* 100.0 / self.max as f32)
 	}
 
 	fn set(&mut self, value: f32) -> error::Result<()> {
 		let mut file = File::create(&self.path)?;
-		write!(&mut file, "{}", ((value * self.max as f32) / 100.0).round() as u32)?;
+		write!(&mut file, "{}", ((super::normalize(value) * self.max as f32) / 100.0).round() as u32)?;
 
 		Ok(())
 	}
