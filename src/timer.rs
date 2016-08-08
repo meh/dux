@@ -22,16 +22,19 @@ use std::time::{Duration, Instant};
 
 use error;
 
+/// Timer handler.
 pub struct Timer {
 	receiver: Receiver<Event>,
 }
 
 #[derive(Debug)]
 pub enum Event {
+	/// The auto-save timer has fired.
 	Save,
 }
 
 impl Timer {
+	/// Spawn the `Timer` thread.
 	pub fn spawn() -> error::Result<Self> {
 		let (sender, receiver) = channel();
 
