@@ -13,7 +13,7 @@ cargo install dux
 
 Usage
 -----
-DUX can be used like a replacement for `xbacklight`, the command syntax changes
+`dux` can be used like a replacement for `xbacklight`, the command syntax changes
 slightly but the functionality is the same (`get`, `set`, `inc`, `dec`, all
 with the usual fade settings).
 
@@ -37,7 +37,7 @@ profiles are useful for example to have different settings during the night and
 during the day, or when you're inside or outside.
 
 To configure the brightness levels for the various modes all you have to do is
-change the backlight from dux itself like you would with `xbacklight` and the
+change the backlight from `dux` itself like you would with `xbacklight` and the
 change will be saved. If you don't want to do that you can call `dux sync`
 after changing the backlight with something else.
 
