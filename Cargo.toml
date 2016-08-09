@@ -13,10 +13,11 @@ keywords    = ["x11", "graphics"]
 log        = "0.3"
 env_logger = "0.3"
 
-clap = "2"
-xdg  = "2"
-json = "0.10"
-dbus = "0.3"
+clap   = "2"
+xdg    = "2"
+json   = "0.10"
+dbus   = "0.3"
+chrono = "0.2"
 
 xcb       = { version = "0.7", features = ["randr", "damage"] }
 xcb-util  = { version = "0.1", features = ["icccm", "ewmh", "image", "shm"] }

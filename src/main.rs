@@ -28,6 +28,7 @@ use clap::{ArgMatches, Arg, App, SubCommand};
 extern crate json;
 extern crate xdg;
 extern crate dbus;
+extern crate chrono;
 
 extern crate xcb;
 extern crate xcb_util as xcbu;
@@ -233,7 +234,7 @@ pub fn dec(matches: &ArgMatches, mut backlight: Box<Backlight>) {
 }
 
 pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<Backlight>) {
-	use std::time::{Duration, Instant, SystemTime};
+	use std::time::{Duration, Instant};
 
 	let time = matches.value_of("time").unwrap_or("5").parse().unwrap();
 	let step = matches.value_of("step").unwrap_or("1.0").parse().unwrap();
@@ -271,7 +272,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 					cache::Mode::Luminance(screen.luminance()),
 
 				interface::Mode::Time =>
-					cache::Mode::Time(SystemTime::now()),
+					cache::Mode::Time(chrono::Local::now()),
 			}
 		);
 	}
@@ -295,6 +296,14 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 		select! {
 			event = timer.recv() => {
 				match event.unwrap() {
+					timer::Event::Heartbeat => {
+						if mode == interface::Mode::Time {
+							if let Some(value) = cache.get(cache::Mode::Time(chrono::Local::now())).unwrap() {
+								fade!(value).unwrap();
+							}
+						}
+					}
+
 					timer::Event::Save => {
 						cache.save().unwrap();
 					}

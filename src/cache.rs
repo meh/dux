@@ -18,11 +18,11 @@
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 use std::sync::Arc;
 
 use xdg;
 use json::{self, JsonValue};
+use chrono::{self, Timelike};
 use xcb;
 use xcbu;
 
@@ -45,7 +45,7 @@ pub enum Mode {
 	Desktop(i32),
 	Window(Option<xcb::Window>),
 	Luminance(f32),
-	Time(SystemTime),
+	Time(chrono::DateTime<chrono::Local>),
 }
 
 impl Cache {
@@ -155,8 +155,23 @@ impl Cache {
 				}
 			}
 
+			// Store the half hours since midnight in a sorted array.
 			Mode::Time(time) => {
-				// TODO: it
+				if self.data[&self.profile]["time"].is_null() {
+					self.data[&self.profile]["time"] = array!{};
+				}
+
+				if let JsonValue::Array(ref mut array) = self.data[&self.profile]["time"] {
+					let halves = time.num_seconds_from_midnight() / (30 * 60);
+
+					match array.binary_search_by_key(&halves, |v| v[0].as_u32().unwrap()) {
+						Ok(index) =>
+							array[index] = array![halves, value],
+
+						Err(index) =>
+							array.insert(index, array![halves, value]),
+					}
+				}
 			}
 		}
 
@@ -232,8 +247,7 @@ impl Cache {
 							return Ok(Some(value));
 						}
 
-						// User linear interpolation to get the proper brightness for the
-						// luminance.
+						// Use linear interpolation to get the proper brightness.
 						(Some((g1, d1)), Some((g2, d2))) => {
 							let g  = luma as f32;
 							let g1 = g1 as f32;
@@ -245,9 +259,44 @@ impl Cache {
 				}
 			}
 
-			// This is me being lazy.
+			// Fetching the time is also convulted.
 			Mode::Time(time) => {
-				// TODO: it
+				if let JsonValue::Array(ref slice) = self.data[&self.profile]["time"] {
+					if slice.is_empty() {
+						return Ok(None);
+					}
+
+					let halves = time.num_seconds_from_midnight() / (30 * 60);
+
+					// Since the halves are sorted we can do a binary search to fetch the
+					// surrounding values.
+					let index = match slice.binary_search_by_key(&halves, |v| v[0].as_u32().unwrap()) {
+						Ok(index) | Err(index) => index
+					};
+
+					let before = slice.get(index.overflowing_sub(1).0).map(|v| (v[0].as_u32().unwrap(), v[1].as_f32().unwrap()));
+					let after  = slice.get(index).map(|v| (v[0].as_u32().unwrap(), v[1].as_f32().unwrap()));
+
+					match (before, after) {
+						// This is not possible, it would mean the array was empty.
+						(None, None) =>
+							unreachable!(),
+
+						// Just return the one value.
+						(Some((_, value)), None) | (None, Some((_, value))) => {
+							return Ok(Some(value));
+						}
+
+						// Use linear interpolation to get the proper brightness.
+						(Some((g1, d1)), Some((g2, d2))) => {
+							let g  = halves as f32;
+							let g1 = g1 as f32;
+							let g2 = g2 as f32;
+
+							return Ok(Some(d1 + ((g - g1) / (g2 - g1)) * (d2 - d1)));
+						}
+					}
+				}
 			}
 		}
 

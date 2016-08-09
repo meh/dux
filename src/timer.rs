@@ -29,6 +29,9 @@ pub struct Timer {
 
 #[derive(Debug)]
 pub enum Event {
+	/// Sent every timer tick.
+	Heartbeat,
+
 	/// The auto-save timer has fired.
 	Save,
 }
@@ -43,6 +46,8 @@ impl Timer {
 
 			loop {
 				thread::sleep(Duration::from_secs(1));
+
+				sender.send(Event::Heartbeat).unwrap();
 
 				if save.elapsed().as_secs() > 30 {
 					save = Instant::now();
