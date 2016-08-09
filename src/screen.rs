@@ -56,6 +56,7 @@ impl Screen {
 		})
 	}
 
+	/// Resize the screen.
 	pub fn resize(&mut self, width: u32, height: u32) -> error::Result<()> {
 		// Create a new image only if the new size is bigger than the actual size.
 		if self.image.actual_width() * self.image.actual_height() < (width * height) as u16 {
@@ -84,14 +85,20 @@ impl Screen {
 	pub fn refresh(&mut self, x: u32, y: u32, width: u32, height: u32) -> error::Result<()> {
 		// Note that this will resize the image to fit the section, but that
 		// doesn't matter because it will never be bigger than the screen.
-		xcbu::image::shm::area(&self.display.clone(), self.display.root(), &mut self.image,
+		xcbu::image::shm::area(&self.display, self.display.root(), &mut self.image,
 			x as i16, y as i16, width as u16, height as u16, !0)?;
 
 		// Update the pixel values relative to the section.
 		for xx in x .. width {
 			for yy in y .. height {
-				let px = self.image.get(xx - x, yy - y);
-				self.put(xx, yy, px);
+				let rgb = {
+					let data   = self.image.data();
+					let offset = (((xx - x) * 4) + ((yy - y) * width * 4)) as usize;
+
+					(data[offset + 0], data[offset + 1], data[offset + 2])
+				};
+
+				self.put(xx, yy, rgb);
 			}
 		}
 
@@ -99,21 +106,14 @@ impl Screen {
 	}
 
 	/// Puts a pixel at the given coordinates, updating the total luminance.
-	pub fn put(&mut self, x: u32, y: u32, pixel: u32) -> f32 {
+	pub fn put(&mut self, x: u32, y: u32, (r, g, b): (u8, u8, u8)) -> f32 {
 		// Extract the RGB channels and normalize them to `0.0` - `1.0`.
-		let r = ((pixel & 0xff0000) >> 16) as f32 / 255.0;
-		let g = ((pixel & 0x00ff00) >> 8) as f32 / 255.0;
-		let b = (pixel & 0x0000ff) as f32 / 255.0;
+		let r = r as f32 / 255.0;
+		let g = g as f32 / 255.0;
+		let b = b as f32 / 255.0;
 
-		// Do some more normalization.
-		let r = if r > 0.4045 { ((r + 0.055) / 1.055).powf(2.4) } else { r / 12.92 };
-		let g = if g > 0.4045 { ((g + 0.055) / 1.055).powf(2.4) } else { g / 12.92 };
-		let b = if b > 0.4045 { ((b + 0.055) / 1.055).powf(2.4) } else { b / 12.92 };
-
-		// Calculate the LUMA and normalize it.
-		let l = ((r * 0.2126) + (g * 0.7152) + (b * 0.0722)) / 1.0;
-		let l = if l > 0.008856 { l.powf(1.0 / 3.0) } else { (l * 7.787) + (16.0 / 116.0) };
-		let l = (l * 116.0) - 16.0;
+		// Calculate the perceived luminance.
+		let l = (r * 0.299) + (g * 0.587) + (b * 0.114);
 
 		// The index within the luminance vector based on the position.
 		let i = (y * self.width + x) as usize;
@@ -133,9 +133,8 @@ impl Screen {
 		l
 	}
 
-	/// Get the root mean square of the total luminance.
+	/// Get the RMS luminance.
 	pub fn luminance(&self) -> f32 {
-		((self.luminance as f32 / PRECISION)
-			/ (self.width * self.height) as f32).sqrt()
+		((self.luminance as f32 / PRECISION) / (self.width * self.height) as f32).sqrt()
 	}
 }

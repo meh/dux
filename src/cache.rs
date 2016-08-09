@@ -140,7 +140,7 @@ impl Cache {
 					// The luminance value is rounded and limited to an `u8` so the
 					// actual settable luminance ranges are between 0 and 100 and don't
 					// suffer bloating caused by precision errors.
-					let luma = luma.round() as u8;
+					let luma = (luma * 100.0).round() as u8;
 
 					// Just use binary search and insert/replace as told.
 					match array.binary_search_by_key(&luma, |v| v[0].as_u8().unwrap()) {
@@ -205,7 +205,7 @@ impl Cache {
 					// The luminance value is rounded and limited to an `u8` so the
 					// actual settable luminance ranges are between 0 and 100 and don't
 					// suffer bloating caused by precision errors.
-					let luma = luma.round() as u8;
+					let luma = (luma * 100.0).round() as u8;
 
 					// Since the luminance values are sorted we can do a binary search to
 					// fetch the surrounding values.
