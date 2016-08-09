@@ -61,7 +61,6 @@ pub fn clamp(value: f32) -> f32 {
 	}
 }
 
-
 /// Fades the backlight from the current value to the given value.
 pub mod fade {
 	use std::thread;
