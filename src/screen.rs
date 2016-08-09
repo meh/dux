@@ -73,6 +73,7 @@ impl Screen {
 		self.luminances.resize((width * height) as usize, 0.0);
 		self.luminance = 0;
 
+		// This gets optimized to a memset.
 		for item in &mut self.luminances {
 			*item = 0.0;
 		}
@@ -116,7 +117,7 @@ impl Screen {
 		let l = (r * 0.299) + (g * 0.587) + (b * 0.114);
 
 		// The index within the luminance vector based on the position.
-		let i = (y * self.width + x) as usize;
+		let i = (x + (y * self.width)) as usize;
 
 		// Update the total luminance in place, we use an `u64` to contain the
 		// total to avoid incremental precision errors because of the repeated
