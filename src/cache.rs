@@ -105,7 +105,9 @@ impl Cache {
 	/// Set the brightness value for the given mode.
 	pub fn set(&mut self, mode: Mode, value: f32) -> error::Result<()> {
 		match mode {
-			Mode::Manual => (),
+			Mode::Manual => {
+				self.data[&self.profile]["manual"] = value.into();
+			}
 
 			// Just store the ID.
 			Mode::Desktop(id) => {
@@ -164,7 +166,11 @@ impl Cache {
 	/// Get the brightness value for the given mode.
 	pub fn get(&mut self, mode: Mode) -> error::Result<Option<f32>> {
 		match mode {
-			Mode::Manual => (),
+			Mode::Manual => {
+				if let Some(value) = self.data[&self.profile]["manual"].as_f32() {
+					return Ok(Some(value));
+				}
+			}
 
 			// Desktop just checks the desktop ID.
 			Mode::Desktop(id) => {
