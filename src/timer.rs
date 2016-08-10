@@ -16,7 +16,7 @@
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::thread;
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, Sender, SendError, channel};
 use std::ops::Deref;
 use std::time::{Duration, Instant};
 
@@ -25,40 +25,74 @@ use error;
 /// Timer handler.
 pub struct Timer {
 	receiver: Receiver<Event>,
+	refresh:  Sender<u64>,
 }
 
 #[derive(Debug)]
 pub enum Event {
-	/// Sent every timer tick.
+	/// Sent every `refresh` milliseconds.
+	Refresh,
+
+	/// Hurts my kokoro.
 	Heartbeat,
 
 	/// The auto-save timer has fired.
 	Save,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Settings {
+	pub save:      u64,
+	pub heartbeat: u64,
+}
+
 impl Timer {
 	/// Spawn the `Timer` thread.
-	pub fn spawn() -> error::Result<Self> {
-		let (sender, receiver) = channel();
+	pub fn spawn(settings: Settings) -> error::Result<Self> {
+		let (sender, receiver)   = channel();
+		let (refresh, refresher) = channel();
 
+		// Spawn the refresh timer.
+		{
+			let sender = sender.clone();
+
+			thread::spawn(move || {
+				while let Ok(value) = refresher.recv() {
+					thread::sleep(Duration::from_millis(value));
+					sender.send(Event::Refresh).unwrap();
+				}
+			});
+		}
+
+		// Spawn the constant timers.
 		thread::spawn(move || {
 			let mut save = Instant::now();
+			let mut beat = Instant::now();
 
 			loop {
 				thread::sleep(Duration::from_secs(1));
 
-				sender.send(Event::Heartbeat).unwrap();
-
-				if save.elapsed().as_secs() > 30 {
+				if save.elapsed().as_secs() >= settings.save {
 					save = Instant::now();
 					sender.send(Event::Save).unwrap();
+				}
+
+				if beat.elapsed().as_secs() >= settings.heartbeat {
+					beat = Instant::now();
+					sender.send(Event::Heartbeat).unwrap();
 				}
 			}
 		});
 
 		Ok(Timer {
 			receiver: receiver,
+			refresh:  refresh,
 		})
+	}
+
+	/// Request a refresh after the given milliseconds.
+	pub fn refresh(&self, value: u64) -> Result<(), SendError<u64>> {
+		self.refresh.send(value)
 	}
 }
 
