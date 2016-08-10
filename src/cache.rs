@@ -66,7 +66,7 @@ impl Cache {
 			let mut content = String::new();
 			file.read_to_string(&mut content)?;
 
-			json::parse(&content).unwrap_or(object!{})
+			json::parse(&content).unwrap_or_else(|_| object!{})
 		}
 		else {
 			object!{}

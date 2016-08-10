@@ -169,13 +169,9 @@ impl Interface {
 			);
 
 			(watch $conn:expr, $filter:expr) => (
-				match $conn.add_match($filter) {
-					Err(error) => {
-						g_sender.send(Err(error.into())).unwrap();
-						return;
-					}
-
-					Ok(_) => ()
+				if let Err(error) =  $conn.add_match($filter) {
+					g_sender.send(Err(error.into())).unwrap();
+					return;
 				}
 			);
 
