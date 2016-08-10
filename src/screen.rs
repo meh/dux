@@ -16,7 +16,10 @@
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::Arc;
+use std::time::Instant;
+use std::cmp;
 
+use xcb;
 use xcbu;
 
 use {Display, error};
@@ -31,6 +34,9 @@ pub struct Screen {
 
 	luminances: Vec<f32>,
 	luminance:  u64,
+
+	cache: Vec<(u32, u32, u32, u32)>,
+	rated: Option<Instant>,
 }
 
 const PRECISION: f32 = 1_000_000.0;
@@ -53,6 +59,9 @@ impl Screen {
 
 			luminances: luminances,
 			luminance:  0,
+
+			cache: Vec::new(),
+			rated: None,
 		})
 	}
 
@@ -80,6 +89,46 @@ impl Screen {
 
 		// Update the whole screen.
 		self.refresh(0, 0, width, height)
+	}
+
+	/// Flush any cached damages.
+	pub fn flush(&mut self) -> error::Result<()> {
+		if self.rated.is_none() || self.cache.is_empty() {
+			return Ok(());
+		}
+
+		let (x, y, w, h) = self.cache.drain(..).fold((u32::max_value(), u32::max_value(), 0, 0),
+			|(xmin, ymin, xmax, ymax), (x, y, w, h)| {
+				(cmp::min(xmin, x), cmp::min(ymin, y), cmp::max(xmax, x + w), cmp::max(ymax, y + h))
+			});
+
+		self.rated = None;
+		self.refresh(x, y, w - x, h - y)
+	}
+
+	/// Mark a screen area as damaged.
+	pub fn damage(&mut self, rect: xcb::Rectangle, threshold: u64) -> error::Result<bool> {
+		let x = rect.x() as u32;
+		let y = rect.y() as u32;
+		let w = rect.width() as u32;
+		let h = rect.height() as u32;
+
+		if self.rated.is_some() && (w * h) as u64 >= threshold {
+			self.cache.push((x, y, w, h));
+
+			Ok(false)
+		}
+		else if (w * h) as u64 >= threshold {
+			self.rated = Some(Instant::now());
+			self.refresh(x, y, w, h)?;
+
+			Ok(false)
+		}
+		else {
+			self.refresh(x, y, w, h)?;
+
+			Ok(true)
+		}
 	}
 
 	/// Get the given screen section and update the luminance values.

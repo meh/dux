@@ -121,6 +121,16 @@ fn main() {
 				.help("Number of steps in fade (default is 0).")))
 		.subcommand(SubCommand::with_name("adaptive")
 			.about("Start adaptive brightness.")
+			.arg(Arg::with_name("refresh")
+				.short("R")
+				.long("refresh")
+				.takes_value(true)
+				.help("Distance in milliseconds within which damages are collapsed (default is 500)."))
+			.arg(Arg::with_name("threshold")
+				.short("T")
+				.long("threshold")
+				.takes_value(true)
+				.help("Minimum total number of pixels for damages to be collapsed (default is `160000` around `400x400`)."))
 			.arg(Arg::with_name("time")
 				.short("t")
 				.long("time")
@@ -236,12 +246,19 @@ pub fn dec(matches: &ArgMatches, mut backlight: Box<Backlight>) {
 pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<Backlight>) {
 	use std::time::{Duration, Instant};
 
-	let time = matches.value_of("time").unwrap_or("5").parse().unwrap();
-	let step = matches.value_of("step").unwrap_or("1.0").parse().unwrap();
+	let time      = matches.value_of("time").unwrap_or("5").parse().unwrap();
+	let step      = matches.value_of("step").unwrap_or("1.0").parse().unwrap();
+	let refresh   = matches.value_of("refresh").unwrap_or("500").parse().unwrap();
+	let threshold = if refresh > 0 {
+		matches.value_of("threshold").unwrap_or("160000").parse().unwrap()
+	}
+	else {
+		u64::max_value()
+	};
 
 	let     interface = Interface::spawn().unwrap();
 	let     observer  = Observer::spawn(display.clone()).unwrap();
-	let     timer     = Timer::spawn().unwrap();
+	let     timer     = Timer::spawn(timer::Settings { save: 30, heartbeat: 300 }).unwrap();
 	let mut cache     = Cache::open(display.clone(), matches.value_of("cache")).unwrap();
 	let mut screen    = Screen::open(display.clone(), display.width(), display.height()).unwrap();
 
@@ -254,6 +271,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 	let mut desktop     = 0;
 	let mut changed     = Instant::now() - Duration::from_secs(42);
 	let mut brightness  = 0.0;
+	let mut rated       = false;
 	let mut screensaver = false;
 
 	macro_rules! mode {
@@ -280,7 +298,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 	macro_rules! fade {
 		($value:expr) => (
 			match $value {
-				v if v != brightness => {
+				Some(v) if v != brightness => {
 					brightness = v;
 					backlight::fade::by_step(&mut backlight, v, step, time)
 				}
@@ -292,15 +310,30 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 		)
 	}
 
+	// XXX: select! is hicky
+	let t = &*timer;
+	let i = &*interface;
+	let o = &*observer;
+
 	loop {
 		select! {
-			event = timer.recv() => {
+			event = t.recv() => {
 				match event.unwrap() {
+					timer::Event::Refresh => {
+						rated = false;
+
+						if mode == interface::Mode::Luminance {
+							screen.flush().unwrap();
+
+							if changed.elapsed().as_secs() >= 1 {
+								fade!(cache.get(cache::Mode::Luminance(screen.luminance())).unwrap()).unwrap()
+							}
+						}
+					}
+
 					timer::Event::Heartbeat => {
 						if mode == interface::Mode::Time {
-							if let Some(value) = cache.get(cache::Mode::Time(chrono::Local::now())).unwrap() {
-								fade!(value).unwrap();
-							}
+							fade!(cache.get(cache::Mode::Time(chrono::Local::now())).unwrap()).unwrap();
 						}
 					}
 
@@ -310,14 +343,11 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 				}
 			},
 
-			event = interface.recv() => {
+			event = i.recv() => {
 				match event.unwrap() {
 					interface::Event::Mode(value) => {
 						mode = value;
-
-						if let Some(value) = cache.get(mode!(value)).unwrap() {
-							fade!(value).unwrap();
-						}
+						fade!(cache.get(mode!(value)).unwrap()).unwrap();
 					}
 
 					interface::Event::Profile(name) => {
@@ -343,7 +373,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 				}
 			},
 
-			event = observer.recv() => {
+			event = o.recv() => {
 				match event.unwrap() {
 					observer::Event::Show(_) | observer::Event::Hide(_) | observer::Event::Change(_) => (),
 
@@ -351,9 +381,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 						desktop = id;
 
 						if mode == interface::Mode::Desktop {
-							if let Some(value) = cache.get(cache::Mode::Desktop(desktop)).unwrap() {
-								fade!(value).unwrap();
-							}
+							fade!(cache.get(cache::Mode::Desktop(desktop)).unwrap()).unwrap();
 						}
 					}
 
@@ -361,20 +389,23 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 						active = value;
 
 						if mode == interface::Mode::Window {
-							if let Some(value) = cache.get(cache::Mode::Window(active)).unwrap() {
-								fade!(value).unwrap();
-							}
+							fade!(cache.get(cache::Mode::Window(active)).unwrap()).unwrap();
 						}
 					}
 
 					observer::Event::Damage(rect) => {
 						if mode == interface::Mode::Luminance && !screensaver {
-							screen.refresh(rect.x() as u32, rect.y() as u32, rect.width() as u32, rect.height() as u32).unwrap();
+							let refreshed = screen.damage(rect, threshold).unwrap();
 
-							if changed.elapsed().as_secs() >= 1 {
-								if let Some(value) = cache.get(cache::Mode::Luminance(screen.luminance())).unwrap() {
-									fade!(value).unwrap()
+							if !refreshed {
+								if !rated {
+									now = Instant::now();
+									timer.refresh(refresh).unwrap();
+									rated = true;
 								}
+							}
+							else if changed.elapsed().as_secs() >= 1 {
+								fade!(cache.get(cache::Mode::Luminance(screen.luminance())).unwrap()).unwrap()
 							}
 						}
 					}
