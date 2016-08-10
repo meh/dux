@@ -96,7 +96,7 @@ impl Screen {
 					let data   = self.image.data();
 					let offset = (((xx - x) * 4) + ((yy - y) * width * 4)) as usize;
 
-					(data[offset + 0], data[offset + 1], data[offset + 2])
+					(data[offset], data[offset + 1], data[offset + 2])
 				};
 
 				self.put(xx, yy, rgb);
