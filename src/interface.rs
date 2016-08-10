@@ -169,13 +169,9 @@ impl Interface {
 			);
 
 			(watch $conn:expr, $filter:expr) => (
-				match $conn.add_match($filter) {
-					Err(error) => {
-						g_sender.send(Err(error.into())).unwrap();
-						return;
-					}
-
-					Ok(_) => ()
+				if let Err(error) = $conn.add_match($filter) {
+					g_sender.send(Err(error.into())).unwrap();
+					return;
 				}
 			);
 
@@ -245,14 +241,11 @@ impl Interface {
 			tree.set_registered(&c, true).unwrap();
 			for item in tree.run(&c, c.iter(1_000_000)) {
 				if let dbus::ConnectionItem::Signal(m) = item {
-					match (&*m.interface().unwrap(), &*m.member().unwrap()) {
-						("org.gnome.ScreenSaver", "ActiveChanged") => {
-							if let Some(status) = m.get1() {
-								sender.send(Event::ScreenSaver(status)).unwrap();
-							}
+					if let ("org.gnome.ScreenSaver", "ActiveChanged") =
+					       (&*m.interface().unwrap(), &*m.member().unwrap()) {
+						if let Some(status) = m.get1() {
+							sender.send(Event::ScreenSaver(status)).unwrap();
 						}
-
-						_ => ()
 					}
 				}
 			}

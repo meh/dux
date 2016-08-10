@@ -56,14 +56,14 @@ pub enum Event {
 impl Observer {
 	/// Get the current desktop.
 	pub fn desktop(display: &Display) -> error::Result<i32> {
-		xcb::get_property(&display, false, display.root(), display.CURRENT_DESKTOP(), xcb::ATOM_CARDINAL, 0, 1)
-			.get_reply()?.value::<i32>().get(0).map(|&v| v).ok_or(error::Error::Unsupported)
+		xcb::get_property(display, false, display.root(), display.CURRENT_DESKTOP(), xcb::ATOM_CARDINAL, 0, 1)
+			.get_reply()?.value::<i32>().get(0).cloned().ok_or(error::Error::Unsupported)
 	}
 
 	/// Get the currently active window, if any.
 	pub fn window(display: &Display) -> error::Result<Option<xcb::Window>> {
-		let id = xcb::get_property(&display, false, display.root(), display.ACTIVE_WINDOW(), xcb::ATOM_WINDOW, 0, 1)
-			.get_reply()?.value::<xcb::Window>().get(0).map(|&v| v).ok_or(error::Error::Unsupported)?;
+		let id = xcb::get_property(display, false, display.root(), display.ACTIVE_WINDOW(), xcb::ATOM_WINDOW, 0, 1)
+			.get_reply()?.value::<xcb::Window>().get(0).cloned().ok_or(error::Error::Unsupported)?;
 
 		if id == 0 {
 			Ok(None)
