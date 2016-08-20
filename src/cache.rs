@@ -88,7 +88,7 @@ impl Cache {
 	/// Save the cache to disk.
 	pub fn save(&mut self) -> error::Result<()> {
 		let mut file = File::create(&self.path)?;
-		self.data.to_writer(&mut file);
+		self.data.write_pretty(&mut file, 2)?;
 
 		Ok(())
 	}
