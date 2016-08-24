@@ -38,7 +38,7 @@ impl Display {
 
 		// Randr is used for the backlight and screen configuration changes events.
 		{
-			let version   = xcb::randr::query_version(&connection, 1, 2).get_reply()?;
+			let version = xcb::randr::query_version(&connection, 1, 2).get_reply()?;
 
 			if version.major_version() != 1 || version.minor_version() < 2 {
 				return Err(error::Error::Unsupported);
