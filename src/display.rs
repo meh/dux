@@ -27,14 +27,7 @@ pub struct Display {
 	connection: xcbu::ewmh::Connection,
 	screen:     i32,
 	root:       xcb::Window,
-
-	randr:  xcb::QueryExtensionData,
-	shm:    xcb::QueryExtensionData,
-	damage: xcb::QueryExtensionData,
 }
-
-unsafe impl Send for Display { }
-unsafe impl Sync for Display { }
 
 impl Display {
 	/// Open the default display.
@@ -44,8 +37,7 @@ impl Display {
 		let root                 = connection.get_setup().roots().nth(screen as usize).unwrap().root();
 
 		// Randr is used for the backlight and screen configuration changes events.
-		let randr = {
-			let extension = connection.get_extension_data(xcb::randr::id()).ok_or(error::Error::Unsupported)?;
+		{
 			let version   = xcb::randr::query_version(&connection, 1, 2).get_reply()?;
 
 			if version.major_version() != 1 || version.minor_version() < 2 {
@@ -54,42 +46,30 @@ impl Display {
 
 			xcb::randr::select_input_checked(&connection, root, xcb::randr::NOTIFY_MASK_SCREEN_CHANGE as u16)
 				.request_check()?;
-
-			extension
-		};
+		}
 
 		// MIT-SHM is used to fetch screen contents.
-		let shm = {
-			let extension = connection.get_extension_data(xcb::shm::id()).ok_or(error::Error::Unsupported)?;
-			let version   = xcb::shm::query_version(&connection).get_reply()?;
+		{
+			let version = xcb::shm::query_version(&connection).get_reply()?;
 
 			if version.major_version() != 1 || version.minor_version() < 1 {
 				return Err(error::Error::Unsupported);
 			}
-
-			extension
-		};
+		}
 
 		// DAMAGE is used to get screen content changes.
-		let damage = {
-			let extension = connection.get_extension_data(xcb::damage::id()).ok_or(error::Error::Unsupported)?;
-			let version   = xcb::damage::query_version(&connection, 1, 1).get_reply()?;
+		{
+			let version  = xcb::damage::query_version(&connection, 1, 1).get_reply()?;
 
 			if version.major_version() != 1 || version.minor_version() < 1 {
 				return Err(error::Error::Unsupported);
 			}
-
-			extension
-		};
+		}
 
 		Ok(Display {
 			connection: connection,
 			screen:     screen,
 			root:       root,
-
-			randr:  randr,
-			shm:    shm,
-			damage: damage,
 		})
 	}
 
@@ -114,18 +94,18 @@ impl Display {
 	}
 
 	/// Get the XRandr extension details.
-	pub fn randr(&self) -> &xcb::QueryExtensionData {
-		&self.randr
+	pub fn randr(&self) -> xcb::QueryExtensionData {
+		self.connection.get_extension_data(xcb::randr::id()).unwrap()
 	}
 
 	/// Get the MIT-SHM extension details.
-	pub fn shm(&self) -> &xcb::QueryExtensionData {
-		&self.shm
+	pub fn shm(&self) -> xcb::QueryExtensionData {
+		self.connection.get_extension_data(xcb::shm::id()).unwrap()
 	}
 
 	/// Get the DAMAGE extension details.
-	pub fn damage(&self) -> &xcb::QueryExtensionData {
-		&self.damage
+	pub fn damage(&self) -> xcb::QueryExtensionData {
+		self.connection.get_extension_data(xcb::damage::id()).unwrap()
 	}
 }
 

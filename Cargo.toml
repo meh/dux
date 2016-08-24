@@ -19,6 +19,6 @@ json   = "0.10"
 dbus   = "0.3"
 chrono = "0.2"
 
-xcb       = { version = "0.7", features = ["randr", "damage"] }
-xcb-util  = { version = "0.1", features = ["icccm", "ewmh", "image", "shm"] }
+xcb       = { version = "0.7.5", features = ["randr", "damage", "thread"] }
+xcb-util  = { version = "0.1.5", features = ["icccm", "ewmh", "image", "shm", "thread"] }
 byteorder = "0.5"
