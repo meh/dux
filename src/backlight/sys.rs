@@ -19,7 +19,7 @@ use std::fs::{self, File};
 use std::path::PathBuf;
 use std::io::{Write, Read};
 
-use error;
+use crate::error;
 
 pub struct Backlight {
 	path: PathBuf,

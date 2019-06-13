@@ -20,7 +20,7 @@ use std::ops::Deref;
 use xcb;
 use xcbu;
 
-use error;
+use crate::error;
 
 /// Handles the X11 display.
 pub struct Display {

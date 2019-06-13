@@ -22,7 +22,7 @@ use std::cmp;
 use xcb;
 use xcbu;
 
-use {Display, error};
+use crate::{Display, error};
 
 /// Manages luminances and screen content through the MIT-SHM extension.
 pub struct Screen {

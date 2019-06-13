@@ -17,7 +17,7 @@
 
 use std::sync::Arc;
 
-use {Display, error};
+use crate::{Display, error};
 
 pub trait Backlight {
 	/// The raw backlight range.
@@ -36,7 +36,7 @@ mod randr;
 mod sys;
 
 /// Open the first available backlight handler.
-pub fn open(display: Arc<Display>) -> error::Result<Box<Backlight>> {
+pub fn open(display: Arc<Display>) -> error::Result<Box<dyn Backlight>> {
 	if let Ok(backlight) = randr::Backlight::open(display.clone()) {
 		Ok(Box::new(backlight))
 	}
@@ -67,10 +67,10 @@ pub mod fade {
 	use std::time::Duration;
 	use std::f32;
 	use super::{Backlight, clamp};
-	use error;
+	use crate::error;
 
 	/// It takes `time` milliseconds, split into `steps` increments/decrements.
-	pub fn by_time(backlight: &mut Box<Backlight>, value: f32, time: i32, steps: i32) -> error::Result<()> {
+	pub fn by_time(backlight: &mut Box<dyn Backlight>, value: f32, time: i32, steps: i32) -> error::Result<()> {
 		let value = clamp(value);
 
 		if steps != 0 && time != 0 {
@@ -89,7 +89,7 @@ pub mod fade {
 	}
 
 	/// Waits `time` milliseconds between each `value` increment/decrement.
-	pub fn by_step(backlight: &mut Box<Backlight>, value: f32, step: f32, time: u64) -> error::Result<()> {
+	pub fn by_step(backlight: &mut Box<dyn Backlight>, value: f32, step: f32, time: u64) -> error::Result<()> {
 		if time != 0 {
 			let mut current = backlight.get()?;
 			let     step    = if current > value { -step } else { step };

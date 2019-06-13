@@ -21,12 +21,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use xdg;
-use json::{self, JsonValue};
+use json::{self, JsonValue, object, array};
 use chrono::{self, Timelike};
 use xcb;
 use xcbu;
 
-use {Display, error};
+use crate::{Display, error};
 
 /// An in memory cache persisted to disk for settings.
 ///

@@ -16,11 +16,11 @@
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::thread;
-use std::sync::mpsc::{Receiver, Sender, SendError, channel};
 use std::ops::Deref;
 use std::time::{Duration, Instant};
 
-use error;
+use crate::error;
+use channel::{self, Receiver, Sender, SendError};
 
 /// Timer handler.
 pub struct Timer {
@@ -49,8 +49,8 @@ pub struct Settings {
 impl Timer {
 	/// Spawn the `Timer` thread.
 	pub fn spawn(settings: Settings) -> error::Result<Self> {
-		let (sender, receiver)   = channel();
-		let (refresh, refresher) = channel();
+		let (sender, receiver)   = channel::unbounded();
+		let (refresh, refresher) = channel::unbounded();
 
 		// Spawn the refresh timer.
 		{

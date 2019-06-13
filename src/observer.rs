@@ -16,13 +16,13 @@
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::thread;
-use std::sync::mpsc::{Receiver, sync_channel};
 use std::sync::Arc;
 use std::ops::Deref;
 
 use xcb;
+use channel::{self, Receiver};
 
-use {Display, error};
+use crate::{Display, error};
 
 /// Handles events from a `Display` and sends the appropriate ones.
 pub struct Observer {
@@ -75,7 +75,7 @@ impl Observer {
 
 	/// Spawn the observer on the given `Display`.
 	pub fn spawn(display: Arc<Display>) -> error::Result<Self> {
-		let (sender, receiver) = sync_channel(1);
+		let (sender, receiver) = channel::bounded(1);
 
 		// Listen for map/unmap and configure events.
 		xcb::change_window_attributes_checked(&display, display.root(), &[
@@ -103,25 +103,25 @@ impl Observer {
 			while let Some(event) = display.wait_for_event() {
 				match event.response_type() {
 					xcb::MAP_NOTIFY => {
-						let event = xcb::cast_event(&event): &xcb::MapNotifyEvent;
+						let event = unsafe { xcb::cast_event::<xcb::MapNotifyEvent>(&event) };
 
 						sender.send(Event::Show(event.window())).unwrap();
 					}
 
 					xcb::UNMAP_NOTIFY => {
-						let event = xcb::cast_event(&event): &xcb::UnmapNotifyEvent;
+						let event = unsafe { xcb::cast_event::<xcb::UnmapNotifyEvent>(&event) };
 
 						sender.send(Event::Hide(event.window())).unwrap();
 					}
 
 					xcb::CONFIGURE_NOTIFY => {
-						let event = xcb::cast_event(&event): &xcb::ConfigureNotifyEvent;
+						let event = unsafe { xcb::cast_event::<xcb::ConfigureNotifyEvent>(&event) };
 
 						sender.send(Event::Change(event.window())).unwrap();
 					}
 
 					xcb::PROPERTY_NOTIFY => {
-						let event = xcb::cast_event(&event): &xcb::PropertyNotifyEvent;
+						let event = unsafe { xcb::cast_event::<xcb::PropertyNotifyEvent>(&event) };
 
 						match event.atom() {
 							prop if prop == display.CURRENT_DESKTOP() && event.state() == xcb::PROPERTY_NEW_VALUE as u8 => {
@@ -142,7 +142,7 @@ impl Observer {
 
 					// Handle damaged rectangles.
 					e if e == display.damage().first_event() => {
-						let event = xcb::cast_event(&event): &xcb::damage::NotifyEvent;
+						let event = unsafe { xcb::cast_event::<xcb::damage::NotifyEvent>(&event) };
 						sender.send(Event::Damage(event.area())).unwrap();
 
 						// Mark the damage region as handled.
@@ -152,7 +152,7 @@ impl Observer {
 
 					// Handle screen changes.
 					e if e == display.randr().first_event() + xcb::randr::SCREEN_CHANGE_NOTIFY => {
-						let event = xcb::cast_event(&event): &xcb::randr::ScreenChangeNotifyEvent;
+						let event = unsafe { xcb::cast_event::<xcb::randr::ScreenChangeNotifyEvent>(&event) };
 
 						if event.root() == display.root() {
 							sender.send(Event::Resize(event.width() as u32, event.height() as u32)).unwrap();

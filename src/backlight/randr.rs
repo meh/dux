@@ -20,7 +20,7 @@ use std::sync::Arc;
 use xcb;
 use byteorder::{NativeEndian, ReadBytesExt};
 
-use {Display, error};
+use crate::{Display, error};
 
 pub struct Backlight {
 	display: Arc<Display>,

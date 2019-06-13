@@ -1,6 +1,7 @@
 [package]
 name    = "dux"
 version = "0.1.7"
+edition = "2018"
 
 authors = ["meh. <meh@schizofreni.co>"]
 license = "GPL-3.0"
@@ -10,15 +11,16 @@ repository  = "https://github.com/meh/screenruster"
 keywords    = ["x11", "graphics"]
 
 [dependencies]
-log        = "0.3"
-env_logger = "0.3"
+log        = "0.4"
+env_logger = "0.6"
 
-clap   = "2"
-xdg    = "2"
-json   = "0.10"
-dbus   = "0.3"
-chrono = "0.2"
+clap    = "2"
+xdg     = "2"
+json    = "0.11"
+dbus    = "0.6"
+chrono  = "0.4"
+channel = { package = "crossbeam-channel", version = "0.3" }
 
-xcb       = { version = "0.7.5", features = ["randr", "damage", "thread"] }
-xcb-util  = { version = "0.1.5", features = ["icccm", "ewmh", "image", "shm", "thread"] }
-byteorder = "0.5"
+xcb       = { version = "0.8", features = ["randr", "damage", "thread"] }
+xcbu      = { package = "xcb-util", version = "0.2", features = ["icccm", "ewmh", "image", "shm", "thread"] }
+byteorder = "1"

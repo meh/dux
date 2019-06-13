@@ -15,27 +15,6 @@
 // You should have received a copy of the GNU General Public License
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
-#![feature(question_mark, mpsc_select, type_ascription)]
-
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-
-extern crate clap;
-use clap::{ArgMatches, Arg, App, SubCommand};
-
-#[macro_use]
-extern crate json;
-extern crate xdg;
-extern crate dbus;
-extern crate chrono;
-
-extern crate xcb;
-extern crate xcb_util as xcbu;
-extern crate byteorder;
-
-use std::sync::Arc;
-
 mod error;
 pub use error::Error;
 
@@ -60,8 +39,13 @@ pub use observer::Observer;
 mod cache;
 pub use cache::Cache;
 
+use std::sync::Arc;
+use env_logger;
+use clap::{ArgMatches, Arg, App, SubCommand};
+use channel::select;
+
 fn main() {
-	env_logger::init().unwrap();
+	env_logger::init();
 
 	let     display   = Arc::new(Display::open().expect("no display found"));
 	let mut backlight = backlight::open(display.clone()).expect("no backlight support");
@@ -317,7 +301,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 
 	loop {
 		select! {
-			event = t.recv() => {
+			recv(timer) -> event => {
 				match event.unwrap() {
 					timer::Event::Refresh => {
 						rated = false;
@@ -343,7 +327,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 				}
 			},
 
-			event = i.recv() => {
+			recv(interface) -> event => {
 				match event.unwrap() {
 					interface::Event::Mode(value) => {
 						mode = value;
@@ -373,7 +357,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 				}
 			},
 
-			event = o.recv() => {
+			recv(observer) -> event => {
 				match event.unwrap() {
 					observer::Event::Show(_) | observer::Event::Hide(_) | observer::Event::Change(_) => (),
 

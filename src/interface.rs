@@ -16,12 +16,12 @@
 // along with dux.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::thread;
-use std::sync::mpsc::{Receiver, channel, sync_channel};
 use std::ops::Deref;
 
 use dbus;
+use channel::{self, Receiver};
 
-use {error, backlight};
+use crate::{error, backlight};
 
 /// DBus interface handler.
 pub struct Interface {
@@ -133,11 +133,15 @@ impl Interface {
 
 	/// Spawn the server.
 	pub fn spawn() -> error::Result<Self> {
-		let (sender, receiver)     = sync_channel(1);
-		let (g_sender, g_receiver) = channel::<error::Result<()>>();
+		let (sender, receiver)     = channel::bounded(1);
+		let (g_sender, g_receiver) = channel::unbounded::<error::Result<()>>();
 
 		macro_rules! dbus {
-			(connect) => (
+			(connect system) => (
+				dbus::Connection::get_private(dbus::BusType::System)
+			);
+
+			(connect session) => (
 				match dbus::Connection::get_private(dbus::BusType::Session) {
 					Ok(value) => {
 						value
@@ -169,10 +173,7 @@ impl Interface {
 			);
 
 			(watch $conn:expr, $filter:expr) => (
-				if let Err(error) =  $conn.add_match($filter) {
-					g_sender.send(Err(error.into())).unwrap();
-					return;
-				}
+				$conn.add_match($filter)
 			);
 
 			(ready) => (
@@ -181,62 +182,83 @@ impl Interface {
 
 			(check) => (
 				g_receiver.recv().unwrap()
-			)
+			);
+
+			(try $body:expr) => (
+				match $body {
+					Ok(value) => {
+						value
+					}
+
+					Err(err) => {
+						error!("{:?}", err);
+						return None;
+					}
+				}
+			);
+		}
+
+		macro_rules! cloning {
+			([$($var:ident),*] $closure:expr) => ({
+				$(let $var = $var.clone();)*
+				$closure
+			});
 		}
 
 		thread::spawn(move || {
-			let c = dbus!(connect);
-			let f = dbus::tree::Factory::new_fn();
+			let c = dbus!(connect session);
+			let f = dbus::tree::Factory::new_sync::<()>();
 
 			dbus!(register c, "meh.rust.Backlight");
 			dbus!(watch c, "interface='org.gnome.ScreenSaver',member='ActiveChanged'");
 			dbus!(ready);
 
-			let tree = f.tree().add(f.object_path("/meh/rust/Backlight").introspectable().add(f.interface("meh.rust.Backlight")
-				.add_m(f.method("Mode", |m, _, _| {
-					if let Some(value) = m.get1::<String>().and_then(Mode::parse) {
-						sender.send(Event::Mode(value)).unwrap();
+			let tree = f.tree(())
+				.add(f.object_path("/meh/rust/Backlight", ()).introspectable().add(f.interface("meh.rust.Backlight", ())
+					.add_m(f.method("Mode", (), cloning!([sender] move |m| {
+						if let Some(value) = m.msg.get1::<String>().and_then(Mode::parse) {
+							sender.send(Event::Mode(value)).unwrap();
 
-						Ok(vec![m.method_return()])
-					}
-					else {
-						Err(dbus::tree::MethodErr::no_arg())
-					}
-				}).inarg::<String, _>("mode"))
+							Ok(vec![m.msg.method_return()])
+						}
+						else {
+							Err(dbus::tree::MethodErr::no_arg())
+						}
+					})).inarg::<String, _>("mode"))
 
-				.add_m(f.method("Profile", |m, _, _| {
-					if let Some(value) = m.get1::<String>() {
-						sender.send(Event::Profile(value)).unwrap();
+					.add_m(f.method("Profile", (), cloning!([sender] move |m| {
+						if let Some(value) = m.msg.get1::<String>() {
+							sender.send(Event::Profile(value)).unwrap();
 
-						Ok(vec![m.method_return()])
-					}
-					else {
-						Err(dbus::tree::MethodErr::no_arg())
-					}
-				}).inarg::<String, _>("profile"))
+							Ok(vec![m.msg.method_return()])
+						}
+						else {
+							Err(dbus::tree::MethodErr::no_arg())
+						}
+					})).inarg::<String, _>("profile"))
 
-				.add_m(f.method("Brightness", |m, _, _| {
-					if let Some(value) = m.get1::<f64>() {
-						sender.send(Event::Brightness(value as f32)).unwrap();
+					.add_m(f.method("Brightness", (), cloning!([sender] move |m| {
+						if let Some(value) = m.msg.get1::<f64>() {
+							sender.send(Event::Brightness(value as f32)).unwrap();
 
-						Ok(vec![m.method_return()])
-					}
-					else {
-						Err(dbus::tree::MethodErr::no_arg())
-					}
-				}).inarg::<f64, _>("value"))
+							Ok(vec![m.msg.method_return()])
+						}
+						else {
+							Err(dbus::tree::MethodErr::no_arg())
+						}
+					})).inarg::<f64, _>("value"))
 
-				.add_m(f.method("Save", |m, _, _| {
-					sender.send(Event::Save).unwrap();
+					.add_m(f.method("Save", (), cloning!([sender] move |m| {
+						sender.send(Event::Save).unwrap();
 
-					Ok(vec![m.method_return()])
-				}))
+						Ok(vec![m.msg.method_return()])
+					})))
 
-				.add_m(f.method("Stop", |m, _, _| {
-					sender.send(Event::Stop).unwrap();
+					.add_m(f.method("Stop", (), cloning!([sender] move |m| {
+						sender.send(Event::Stop).unwrap();
 
-					Ok(vec![m.method_return()])
-				}))));
+						Ok(vec![m.msg.method_return()])
+					})))));
 
 			tree.set_registered(&c, true).unwrap();
 			for item in tree.run(&c, c.iter(1_000_000)) {
