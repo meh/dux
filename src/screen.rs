@@ -51,14 +51,10 @@ impl Screen {
 		let luminances = vec![0.0; (width * height) as usize];
 
 		Ok(Screen {
-			display: display,
-			image:   image,
+			display, image,
+			width, height,
 
-			width:  width,
-			height: height,
-
-			luminances: luminances,
-			luminance:  0,
+			luminances, luminance:  0,
 
 			cache: Vec::new(),
 			rated: None,
@@ -110,15 +106,15 @@ impl Screen {
 	pub fn damage(&mut self, rect: xcb::Rectangle, threshold: u64) -> error::Result<bool> {
 		let x = rect.x() as u32;
 		let y = rect.y() as u32;
-		let w = rect.width() as u32;
-		let h = rect.height() as u32;
+		let w = u32::from(rect.width());
+		let h = u32::from(rect.height());
 
-		if self.rated.is_some() && (w * h) as u64 >= threshold {
+		if self.rated.is_some() && u64::from(w * h) >= threshold {
 			self.cache.push((x, y, w, h));
 
 			Ok(false)
 		}
-		else if (w * h) as u64 >= threshold {
+		else if u64::from(w * h) >= threshold {
 			self.rated = Some(Instant::now());
 			self.refresh(x, y, w, h)?;
 
@@ -158,9 +154,9 @@ impl Screen {
 	/// Puts a pixel at the given coordinates, updating the total luminance.
 	pub fn put(&mut self, x: u32, y: u32, (r, g, b): (u8, u8, u8)) -> f32 {
 		// Extract the RGB channels and normalize them to `0.0` - `1.0`.
-		let r = r as f32 / 255.0;
-		let g = g as f32 / 255.0;
-		let b = b as f32 / 255.0;
+		let r = f32::from(r) / 255.0;
+		let g = f32::from(g) / 255.0;
+		let b = f32::from(b) / 255.0;
 
 		// Calculate the perceived luminance.
 		let l = (r * 0.299) + (g * 0.587) + (b * 0.114);

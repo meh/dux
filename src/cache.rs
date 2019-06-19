@@ -78,9 +78,7 @@ impl Cache {
 		}
 
 		Ok(Cache {
-			display: display,
-			data:    data,
-			path:    path,
+			display, data, path,
 			profile: "default".into(),
 		})
 	}
@@ -249,9 +247,9 @@ impl Cache {
 
 						// Use linear interpolation to get the proper brightness.
 						(Some((g1, d1)), Some((g2, d2))) => {
-							let g  = luma as f32;
-							let g1 = g1 as f32;
-							let g2 = g2 as f32;
+							let g  = f32::from(luma);
+							let g1 = f32::from(g1);
+							let g2 = f32::from(g2);
 
 							return Ok(Some(d1 + ((g - g1) / (g2 - g1)) * (d2 - d1)));
 						}

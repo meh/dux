@@ -66,11 +66,7 @@ impl Display {
 			}
 		}
 
-		Ok(Display {
-			connection: connection,
-			screen:     screen,
-			root:       root,
-		})
+		Ok(Display { connection, screen, root })
 	}
 
 	/// Get the default screen.
@@ -85,12 +81,12 @@ impl Display {
 
 	/// Get the default screen width.
 	pub fn width(&self) -> u32 {
-		self.get_setup().roots().nth(self.screen as usize).unwrap().width_in_pixels() as u32
+		u32::from(self.get_setup().roots().nth(self.screen as usize).unwrap().width_in_pixels())
 	}
 
 	/// Get the default screen height.
 	pub fn height(&self) -> u32 {
-		self.get_setup().roots().nth(self.screen as usize).unwrap().height_in_pixels() as u32
+		u32::from(self.get_setup().roots().nth(self.screen as usize).unwrap().height_in_pixels())
 	}
 
 	/// Get the XRandr extension details.

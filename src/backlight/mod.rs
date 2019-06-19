@@ -70,7 +70,7 @@ pub mod fade {
 	use crate::error;
 
 	/// It takes `time` milliseconds, split into `steps` increments/decrements.
-	pub fn by_time(backlight: &mut Box<dyn Backlight>, value: f32, time: i32, steps: i32) -> error::Result<()> {
+	pub fn by_time(backlight: &mut dyn Backlight, value: f32, time: i32, steps: i32) -> error::Result<()> {
 		let value = clamp(value);
 
 		if steps != 0 && time != 0 {
@@ -89,7 +89,7 @@ pub mod fade {
 	}
 
 	/// Waits `time` milliseconds between each `value` increment/decrement.
-	pub fn by_step(backlight: &mut Box<dyn Backlight>, value: f32, step: f32, time: u64) -> error::Result<()> {
+	pub fn by_step(backlight: &mut dyn Backlight, value: f32, step: f32, time: u64) -> error::Result<()> {
 		if time != 0 {
 			let mut current = backlight.get()?;
 			let     step    = if current > value { -step } else { step };

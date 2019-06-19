@@ -102,7 +102,7 @@ impl Interface {
 				"/meh/rust/Backlight",
 				"meh.rust.Backlight",
 				"Brightness")?
-					.append1(backlight::clamp(value) as f64))?;
+					.append1(f64::from(backlight::clamp(value))))?;
 
 		Ok(())
 	}
@@ -278,9 +278,7 @@ impl Interface {
 
 		dbus!(check)?;
 
-		Ok(Interface {
-			receiver: receiver,
-		})
+		Ok(Interface { receiver })
 	}
 }
 

@@ -155,7 +155,7 @@ impl Observer {
 						let event = unsafe { xcb::cast_event::<xcb::randr::ScreenChangeNotifyEvent>(&event) };
 
 						if event.root() == display.root() {
-							sender.send(Event::Resize(event.width() as u32, event.height() as u32)).unwrap();
+							sender.send(Event::Resize(u32::from(event.width()), u32::from(event.height()))).unwrap();
 						}
 					}
 
@@ -164,9 +164,7 @@ impl Observer {
 			}
 		});
 
-		Ok(Observer {
-			receiver: receiver,
-		})
+		Ok(Observer { receiver } )
 	}
 }
 

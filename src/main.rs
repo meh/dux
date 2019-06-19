@@ -196,38 +196,38 @@ fn main() {
 	}
 }
 
-pub fn get(_matches: &ArgMatches, mut backlight: Box<Backlight>) {
+pub fn get(_matches: &ArgMatches, mut backlight: Box<dyn Backlight>) {
 	println!("{:.2}", backlight.get().unwrap());
 }
 
-pub fn set(matches: &ArgMatches, mut backlight: Box<Backlight>) {
+pub fn set(matches: &ArgMatches, mut backlight: Box<dyn Backlight>) {
 	let value = matches.value_of("PERCENTAGE").unwrap().parse().unwrap();
 	let _     = Interface::brightness(value);
 
-	backlight::fade::by_time(&mut backlight, value,
+	backlight::fade::by_time(backlight.as_mut(), value,
 		matches.value_of("time").unwrap_or("200").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("20").parse().unwrap()).unwrap();
 }
 
-pub fn inc(matches: &ArgMatches, mut backlight: Box<Backlight>) {
+pub fn inc(matches: &ArgMatches, mut backlight: Box<dyn Backlight>) {
 	let value = backlight.get().unwrap() + matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap();
 	let _     = Interface::brightness(value);
 
-	backlight::fade::by_time(&mut backlight, value,
+	backlight::fade::by_time(backlight.as_mut(), value,
 		matches.value_of("time").unwrap_or("0").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("0").parse().unwrap()).unwrap();
 }
 
-pub fn dec(matches: &ArgMatches, mut backlight: Box<Backlight>) {
+pub fn dec(matches: &ArgMatches, mut backlight: Box<dyn Backlight>) {
 	let value = backlight.get().unwrap() - matches.value_of("PERCENTAGE").unwrap().parse::<f32>().unwrap();
 	let _     = Interface::brightness(value);
 
-	backlight::fade::by_time(&mut backlight, value,
+	backlight::fade::by_time(backlight.as_mut(), value,
 		matches.value_of("time").unwrap_or("0").parse().unwrap(),
 		matches.value_of("steps").unwrap_or("0").parse().unwrap()).unwrap();
 }
 
-pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<Backlight>) {
+pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<dyn Backlight>) {
 	use std::time::{Duration, Instant};
 
 	let time      = matches.value_of("time").unwrap_or("5").parse().unwrap();
@@ -284,7 +284,7 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 			match $value {
 				Some(v) if v != brightness => {
 					brightness = v;
-					backlight::fade::by_step(&mut backlight, v, step, time)
+					backlight::fade::by_step(backlight.as_mut(), v, step, time)
 				}
 
 				_ => {
@@ -293,11 +293,6 @@ pub fn adaptive(matches: &ArgMatches, display: Arc<Display>, mut backlight: Box<
 			}
 		)
 	}
-
-	// XXX: select! is hicky
-	let t = &*timer;
-	let i = &*interface;
-	let o = &*observer;
 
 	loop {
 		select! {

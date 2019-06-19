@@ -39,7 +39,7 @@ impl Backlight {
 
 		Ok(Backlight {
 			path: root.join("brightness"),
-			max:  max,
+			max,
 		})
 	}
 }

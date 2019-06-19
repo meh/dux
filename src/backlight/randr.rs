@@ -65,12 +65,7 @@ impl Backlight {
 		let range          = xcb::randr::query_output_property(&display, output, atom).get_reply().map(|reply|
 			(reply.valid_values()[0], reply.valid_values()[1]))?;
 
-		Ok(Backlight {
-			display: display,
-			output:  output,
-			atom:    atom,
-			range:   range,
-		})
+		Ok(Backlight { display, output, atom, range })
 	}
 }
 

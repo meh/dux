@@ -84,10 +84,7 @@ impl Timer {
 			}
 		});
 
-		Ok(Timer {
-			receiver: receiver,
-			refresh:  refresh,
-		})
+		Ok(Timer { receiver, refresh })
 	}
 
 	/// Request a refresh after the given milliseconds.
