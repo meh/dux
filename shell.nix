@@ -7,6 +7,7 @@ in
       dbus
       gcc
       pkg-config
+      python3
       rustc
       xorg.libxcb
       xorg.xcbutilimage
