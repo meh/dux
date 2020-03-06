@@ -4,6 +4,17 @@ An X11 backlight manager.
 
 Installation
 ------------
+
+Using [Nix](https://nixos.org/nix), you can access build-time dependencies via
+the Nix shell:
+
+```
+nix-shell
+```
+
+Otherwise, please refer to `buildInputs` in `shell.nix` to check whether you
+have all the required dependencies installed through other means.
+
 To install it you will need a nightly Rust toolchain, then you can install it
 with Cargo:
 
