@@ -24,9 +24,9 @@ cargo install dux
 
 Usage
 -----
-`dux` can be used like a replacement for `xbacklight`, the command syntax changes
-slightly but the functionality is the same (`get`, `set`, `inc`, `dec`, all
-with the usual fade settings).
+`dux` can be used like a replacement for `xbacklight`, the command syntax
+changes slightly but the functionality is the same (`get`, `set`, `inc`, `dec`,
+all with the usual fade settings).
 
 To start the adaptive brightness daemon just run:
 
@@ -55,8 +55,8 @@ during the day, or when you're inside or outside.
 
 To configure the brightness levels for the various modes all you have to do is
 change the backlight from `dux` itself like you would with `xbacklight` and the
-change will be saved. If you don't want to do that you can call `dux sync`
-after changing the backlight with something else.
+change will be saved. If you don't want to do that you can call `dux sync` after
+changing the backlight with something else.
 
 Desktop
 -------
@@ -69,20 +69,20 @@ The `window` mode uses the active window to to reload the previously set
 brightness.
 
 Tt uses both the window's instance and class name to determine the brightness,
-this allows for a common brightness setting for the class and a specific one
-for the named window.
+this allows for a common brightness setting for the class and a specific one for
+the named window.
 
 Luminance
 ---------
-The `luminance` mode uses the screen content's contrast to reload the
-brightness value.
+The `luminance` mode uses the screen content's contrast to reload the brightness
+value.
 
 When the luminance is between two different settings it will interpolate the
 brightness value between the two based on the distance between them.
 
-For example if you have `10` luminance set at `80` brightness and `50`
-luminance set at `20` brightness and the current luminance value is `20` the
-brightness will be closer to `80` than `20`.
+For example if you have `10` luminance set at `80` brightness and `50` luminance
+set at `20` brightness and the current luminance value is `20` the brightness
+will be closer to `80` than `20`.
 
 Performance wise it uses some X extensions to avoid doing heavy work, it uses
 the MIT-SHM extension to avoid connection pressure when fetching the screen
